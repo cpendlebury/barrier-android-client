@@ -46,7 +46,13 @@
    - `performConnect()` re-opens transport + re-sends Hello, restoring `CONNECTING`/`HANDSHAKE`.
 2. **Constants** (`BarrierConstants.kt`): `INITIAL_RECONNECT_BACKOFF_MILLIS`, `MAX_RECONNECT_BACKOFF_MILLIS`.
 3. **Service stopSelf on unexpected disconnect** (`BarrierForegroundService.kt`): `clientListener` wrapper forwards lifecycle to the hosting activity and calls `stopSelf()` (main-thread posted) when the client reaches `DISCONNECTED`.
-4. **Tests**: updated `client disconnects on server close` to assert reconnect → `HANDSHAKE` (2 Hellos); added `client does not reconnect after user disconnect`. BarrierClientTest **8/8**, PacketCodecTest **16/16** → **24 tests total, 0 failures**.
+4. **Screensaver + options handling** (`BarrierClient.kt`, `BarrierConstants.kt`):
+   - `handleScreenSaver` now stores `screenSaverActive` and invokes `onScreenSaverChanged`.
+   - `applyOptions` consumes known option IDs (`OPTION_CLIPBOARD_SHARING`/`CLPS`, `OPTION_HEARTBEAT`/`HART`, `OPTION_SCREEN_SAVER_SYNC`/`SSVR`, `OPTION_RELATIVE_MOUSE_MOVES`/`MDLT`) into state fields and invokes `onOptionsChanged`.
+   - `handleResetOptions` resets applied options + derived state to defaults and restarts keepalive.
+   - New state: `screenSaverActive`, `appliedOptions`, `clipboardSharingEnabled`, `heartbeatSeconds`, `screenSaverSyncEnabled`; callbacks `onScreenSaverChanged`, `onOptionsChanged`.
+   - Option ID constants added to `BarrierConstants.kt` (4-char codes packed big-endian).
+5. **Tests**: screensaver notification, options application, options reset. BarrierClientTest **11/11**, PacketCodecTest **16/16** → **27 tests total, 0 failures**.
 
 ## Protocol facts encoded (Barrier v2.4.0 / protocol v1.6)
 - Frame: u32 **BE** length + payload; command (4 chars; `"Barrier"` greeting = 7 chars), BE int16/int32 params, BE32 string length + UTF-8.
@@ -75,10 +81,10 @@
 - FGS uses `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` — requires the `FOREGROUND_SERVICE_SPECIAL_USE` permission + manifest type (added); runtime start restrictions apply on Android 14+ (FGS-from-background blocked — start from activity is compliant).
 
 ## Immediate next steps
-1. Phase 3 remaining: screensaver/options event handling (CSEC/CROP/DSOP) — currently stubbed; flesh out; file transfer/drag info stubs.
-2. UI/service wiring hardening: accessibility service enabled status surfacing, error surfacing.
-3. Remaining key injection: arbitrary keycodes (letters, modifiers) still require a non-public injection path (hidden `InputManager`/reflection) — evaluate feasibility vs. physical-keyboard/IME approach.
-4. Commit and push this Phase 3 reconnect work.
+1. UI/service wiring hardening: accessibility service enabled status surfacing, error surfacing.
+2. Remaining key injection: arbitrary keycodes (letters, modifiers) still require a non-public injection path (hidden `InputManager`/reflection) — evaluate feasibility vs. physical-keyboard/IME approach.
+3. On-device validation of `ACTION_SET_TEXT` injection and screensaver/options handling.
+4. File transfer/drag info handling (deferred stubs).
 
 ## Handy commands
 - Tests: `./gradlew :app:testDebugUnitTest --offline`

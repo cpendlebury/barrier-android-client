@@ -230,4 +230,80 @@ class BarrierClientTest {
         assertEquals(1, clipboardPackets.size)
         assertEquals(dclp, clipboardPackets.single())
     }
+
+    @Test
+    fun `client notifies screensaver state change`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val screensaverStates = mutableListOf<Boolean>()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+        client.onScreenSaverChanged = { screensaverStates.add(it) }
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(BarrierPacket.ScreenSaverPacket(started = true))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertTrue(client.screenSaverActive)
+        assertEquals(listOf(true), screensaverStates)
+
+        transport.emit(BarrierPacket.ScreenSaverPacket(started = false))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertTrue(!client.screenSaverActive)
+        assertEquals(listOf(true, false), screensaverStates)
+    }
+
+    @Test
+    fun `client applies server options and notifies`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val optionUpdates = mutableListOf<List<Pair<Int, Int>>>()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+        client.onOptionsChanged = { optionUpdates.add(it) }
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        val options = listOf(OPTION_CLIPBOARD_SHARING to 0, OPTION_HEARTBEAT to 30)
+        optionUpdates.clear()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = options))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(options, client.appliedOptions)
+        assertTrue(!client.clipboardSharingEnabled)
+        assertEquals(30, client.heartbeatSeconds)
+        assertEquals(listOf(options), optionUpdates)
+    }
+
+    @Test
+    fun `client resets options on reset-options packet`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val optionUpdates = mutableListOf<List<Pair<Int, Int>>>()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+        client.onOptionsChanged = { optionUpdates.add(it) }
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = listOf(OPTION_CLIPBOARD_SHARING to 0)))
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(BarrierPacket.ResetOptionsPacket())
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(emptyList<Pair<Int, Int>>(), client.appliedOptions)
+        assertTrue(client.clipboardSharingEnabled)
+        assertEquals(0, client.heartbeatSeconds)
+        assertEquals(emptyList<Pair<Int, Int>>(), optionUpdates.last())
+    }
 }

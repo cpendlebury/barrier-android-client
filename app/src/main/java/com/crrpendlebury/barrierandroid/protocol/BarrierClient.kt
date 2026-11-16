@@ -50,6 +50,32 @@ class BarrierClient(
     /** Invoked when clipboard data is received from the server (DCLP). */
     var onClipboardData: ((clipboardData: BarrierPacket.ClipboardDataPacket) -> Unit)? = null
 
+    /** Screen saver state most recently reported by the server (CSEC). */
+    var screenSaverActive: Boolean = false
+        private set
+
+    /** Invoked when the server reports a screensaver state change (CSEC). */
+    var onScreenSaverChanged: ((started: Boolean) -> Unit)? = null
+
+    /** Options most recently applied from the server (DSOP). */
+    var appliedOptions: List<Pair<Int, Int>> = emptyList()
+        private set
+
+    /** Invoked when the server applies options (DSOP). */
+    var onOptionsChanged: ((options: List<Pair<Int, Int>>) -> Unit)? = null
+
+    /** Whether clipboard sharing is enabled per server options. */
+    var clipboardSharingEnabled: Boolean = true
+        private set
+
+    /** Heartbeat interval (seconds) requested by the server, or 0 for default. */
+    var heartbeatSeconds: Int = 0
+        private set
+
+    /** Whether screensaver sync is enabled per server options. */
+    var screenSaverSyncEnabled: Boolean = false
+        private set
+
     /** Supplies clipboard bytes when the server requests a clipboard grab (CCLP -> DCLP). */
     var onClipboardGrab: ((clipboardId: Int, seq: Int) -> ByteArray?)? = null
 
@@ -194,14 +220,15 @@ class BarrierClient(
     }
 
     private fun applyOptions(options: List<Pair<Int, Int>>) {
+        appliedOptions = options
         for ((id, value) in options) {
             when (id) {
-                // Option ids are defined by the protocol; clipboard sharing and
-                // keepalive rate are consumed as they become available.
-                // kOptionClipboardSharing -> value false disables clipboard sharing.
-                // kOptionHeartbeat -> keepalive interval in seconds.
+                OPTION_CLIPBOARD_SHARING -> clipboardSharingEnabled = value != 0
+                OPTION_HEARTBEAT -> heartbeatSeconds = value
+                OPTION_SCREEN_SAVER_SYNC -> screenSaverSyncEnabled = value != 0
             }
         }
+        onOptionsChanged?.invoke(options)
     }
 
     // ------------------------------------------------------------------
@@ -358,10 +385,16 @@ class BarrierClient(
     }
 
     private suspend fun handleScreenSaver(packet: BarrierPacket.ScreenSaverPacket) {
-        // Screensaver state changes are handled in Phase 3 hardening.
+        screenSaverActive = packet.started
+        onScreenSaverChanged?.invoke(packet.started)
     }
 
     private suspend fun handleResetOptions() {
+        appliedOptions = emptyList()
+        clipboardSharingEnabled = true
+        heartbeatSeconds = 0
+        screenSaverSyncEnabled = false
+        onOptionsChanged?.invoke(emptyList())
         stopKeepAlive()
         startKeepAlive()
     }
