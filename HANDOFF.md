@@ -52,6 +52,12 @@
    - `handleResetOptions` resets applied options + derived state to defaults and restarts keepalive.
    - New state: `screenSaverActive`, `appliedOptions`, `clipboardSharingEnabled`, `heartbeatSeconds`, `screenSaverSyncEnabled`; callbacks `onScreenSaverChanged`, `onOptionsChanged`.
    - Option ID constants added to `BarrierConstants.kt` (4-char codes packed big-endian).
+6. **UI/service wiring hardening** (`MainActivity.kt`, `BarrierAccessibilityService.kt`, `activity_main.xml`):
+   - Accessibility service enabled status surfaced via `accessibilityStatusTextView` (checked on create + resume).
+   - "Open Accessibility Settings" button shown when service disabled.
+   - Dedicated `errorTextView` + Toast for connection errors, injection failures, and disabled-service warnings.
+   - `handleClipboardData` surfaces injection failure reason (service disabled vs. no focused editable field).
+   - `BarrierAccessibilityService` companion gains `isEnabled(context)` and `openSettings(context)`.
 5. **Tests**: screensaver notification, options application, options reset. BarrierClientTest **11/11**, PacketCodecTest **16/16** → **27 tests total, 0 failures**.
 
 ## Protocol facts encoded (Barrier v2.4.0 / protocol v1.6)
@@ -81,10 +87,9 @@
 - FGS uses `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` — requires the `FOREGROUND_SERVICE_SPECIAL_USE` permission + manifest type (added); runtime start restrictions apply on Android 14+ (FGS-from-background blocked — start from activity is compliant).
 
 ## Immediate next steps
-1. UI/service wiring hardening: accessibility service enabled status surfacing, error surfacing.
-2. Remaining key injection: arbitrary keycodes (letters, modifiers) still require a non-public injection path (hidden `InputManager`/reflection) — evaluate feasibility vs. physical-keyboard/IME approach.
-3. On-device validation of `ACTION_SET_TEXT` injection and screensaver/options handling.
-4. File transfer/drag info handling (deferred stubs).
+1. Remaining key injection: arbitrary keycodes (letters, modifiers) still require a non-public injection path (hidden `InputManager`/reflection) — evaluate feasibility vs. physical-keyboard/IME approach.
+2. On-device validation of `ACTION_SET_TEXT` injection, screensaver/options handling, and accessibility service status surfacing.
+3. File transfer/drag info handling (deferred stubs).
 
 ## Handy commands
 - Tests: `./gradlew :app:testDebugUnitTest --offline`

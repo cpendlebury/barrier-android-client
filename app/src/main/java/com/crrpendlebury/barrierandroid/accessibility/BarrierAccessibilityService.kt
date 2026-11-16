@@ -2,10 +2,14 @@ package com.crrpendlebury.barrierandroid.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.graphics.Path
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
@@ -134,5 +138,23 @@ class BarrierAccessibilityService : AccessibilityService() {
 
         var instance: BarrierAccessibilityService? = null
             private set
+
+        /** Returns true when this accessibility service is enabled in system settings. */
+        fun isEnabled(context: Context): Boolean {
+            val enabledServices = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            ) ?: return false
+            val expected = ComponentName(context, BarrierAccessibilityService::class.java).flattenToString()
+            return enabledServices.split(":").any { it.equals(expected, ignoreCase = true) }
+        }
+
+        /** Launches the system accessibility settings so the user can enable this service. */
+        fun openSettings(context: Context) {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
     }
 }

@@ -7,9 +7,11 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientListener
@@ -28,10 +30,21 @@ class MainActivity : ComponentActivity() {
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
     private lateinit var statusTextView: TextView
+    private lateinit var accessibilityStatusTextView: TextView
+    private lateinit var openAccessibilitySettingsButton: Button
+    private lateinit var errorTextView: TextView
+
+    private var lastPointerX = 0f
+    private var lastPointerY = 0f
 
     private val barrierClientListener = object : BarrierClientListener {
         override fun onStateChanged(state: BarrierClientState) {
-            runOnUiThread { updateStatus(state) }
+            runOnUiThread {
+                updateStatus(state)
+                if (state == BarrierClientState.CONNECTED) {
+                    errorTextView.text = ""
+                }
+            }
         }
 
         override fun onInputEvent(event: BarrierInputEvent) {
@@ -77,12 +90,18 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onError(error: BarrierError) {
-            runOnUiThread { updateStatus(error) }
+            runOnUiThread {
+                updateStatus(error)
+                val message = when (error) {
+                    is BarrierError.IncompatibleVersion ->
+                        "incompatible server version ${error.serverMajorVersion}.${error.serverMinorVersion}"
+                    is BarrierError.ConnectionFailed -> error.message
+                }
+                errorTextView.text = "Error: $message"
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
-
-    private var lastPointerX = 0f
-    private var lastPointerY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,11 +112,21 @@ class MainActivity : ComponentActivity() {
         connectButton = findViewById(R.id.connectButton)
         disconnectButton = findViewById(R.id.disconnectButton)
         statusTextView = findViewById(R.id.statusTextView)
+        accessibilityStatusTextView = findViewById(R.id.accessibilityStatusTextView)
+        openAccessibilitySettingsButton = findViewById(R.id.openAccessibilitySettingsButton)
+        errorTextView = findViewById(R.id.errorTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
         disconnectButton.setOnClickListener { stopService(Intent(this, BarrierForegroundService::class.java)) }
+        openAccessibilitySettingsButton.setOnClickListener { BarrierAccessibilityService.openSettings(this) }
 
         updateStatus(BarrierClientState.DISCONNECTED)
+        updateAccessibilityStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateAccessibilityStatus()
     }
 
     override fun onDestroy() {
@@ -109,6 +138,13 @@ class MainActivity : ComponentActivity() {
         val host = serverHostEditText.text.toString().trim()
         val port = serverPortEditText.text.toString().toIntOrNull() ?: DEFAULT_BARRIER_PORT
         val clientName = clientNameEditText.text.toString().trim().ifEmpty { DEFAULT_CLIENT_NAME }
+
+        if (!BarrierAccessibilityService.isEnabled(this)) {
+            errorTextView.text = "Accessibility service not enabled; input injection will not work."
+            Toast.makeText(this, "Enable the accessibility service first.", Toast.LENGTH_LONG).show()
+        } else {
+            errorTextView.text = ""
+        }
 
         BarrierForegroundService.pendingConnection = BarrierForegroundService.PendingConnection(
             host = host,
@@ -139,7 +175,16 @@ class MainActivity : ComponentActivity() {
             clipboard.setPrimaryClip(ClipData.newPlainText("barrier", text))
             // Deliver received text into the focused editable app via the
             // accessibility service (ACTION_SET_TEXT).
-            BarrierAccessibilityService.instance?.injectText(text)
+            val service = BarrierAccessibilityService.instance
+            if (service == null || !service.injectText(text)) {
+                if (!BarrierAccessibilityService.isEnabled(this@MainActivity)) {
+                    errorTextView.text = "Accessibility service not enabled; text not injected."
+                } else {
+                    errorTextView.text = "Text injection failed (no focused editable field)."
+                }
+            } else {
+                errorTextView.text = ""
+            }
         }
     }
 
@@ -154,5 +199,11 @@ class MainActivity : ComponentActivity() {
             is BarrierError.ConnectionFailed -> error.message
         }
         statusTextView.text = "Barrier error: $description"
+    }
+
+    private fun updateAccessibilityStatus() {
+        val enabled = BarrierAccessibilityService.isEnabled(this)
+        accessibilityStatusTextView.text = "Accessibility service: " + if (enabled) "enabled" else "disabled"
+        openAccessibilitySettingsButton.visibility = if (enabled) View.GONE else View.VISIBLE
     }
 }
