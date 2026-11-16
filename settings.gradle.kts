@@ -19,9 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-// Template leftover. The installed app is com.crrpendlebury.barrierandroid
-// (launcher label BarrierAndroid). Do not rename call sites to FoodDiary,
-// and do not treat this string as the product name. Renaming the Gradle
-// project is safe and does not change the application id.
-rootProject.name = "FoodDiary"
+// Gradle project name. Does not affect the application id
+// (com.crrpendlebury.barrierandroid) or the launcher label (BarrierAndroid).
+rootProject.name = "BarrierAndroid"
 include(":app")
