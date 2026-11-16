@@ -97,10 +97,18 @@ class BarrierForegroundService : Service() {
     var connectionListener: BarrierClientListener? = null
         private set
 
+    /** Allows a (re)created activity to re-attach its listener to a running client. */
+    fun attachListener(listener: BarrierClientListener) {
+        connectionListener = listener
+    }
+
     var onClipboardGrab: ((clipboardId: Int, seq: Int) -> ByteArray?)? = null
         private set
 
-    override fun onCreate() = super.onCreate()
+    override fun onCreate() {
+        super.onCreate()
+        Companion.instance = this
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Acquire a partial wake lock so the CPU stays awake for keepalive
@@ -139,6 +147,7 @@ class BarrierForegroundService : Service() {
         serviceScope.cancel()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        Companion.instance = null
         super.onDestroy()
     }
 
@@ -232,5 +241,9 @@ class BarrierForegroundService : Service() {
          */
         @Volatile
         var pendingConnection: PendingConnection? = null
+
+        @Volatile
+        var instance: BarrierForegroundService? = null
+            private set
     }
 }

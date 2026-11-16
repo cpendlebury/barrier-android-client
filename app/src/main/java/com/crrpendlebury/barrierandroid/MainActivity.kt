@@ -163,6 +163,25 @@ class MainActivity : ComponentActivity() {
 
         updateStatus(BarrierClientState.DISCONNECTED)
         updateAccessibilityStatus()
+
+        // Restore saved field values if the activity was recreated.
+        savedInstanceState?.let { bundle ->
+            serverHostEditText.setText(bundle.getString("host", ""))
+            serverPortEditText.setText(bundle.getString("port", ""))
+            clientNameEditText.setText(bundle.getString("clientName", ""))
+        }
+
+        // Re-attach to a running service if the activity was recreated.
+        BarrierForegroundService.instance?.let { service ->
+            service.attachListener(barrierClientListener)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("host", serverHostEditText.text.toString())
+        outState.putString("port", serverPortEditText.text.toString())
+        outState.putString("clientName", clientNameEditText.text.toString())
     }
 
     override fun onResume() {
@@ -172,7 +191,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        stopService(Intent(this, BarrierForegroundService::class.java))
+        // Do not stop the service here. The service is a foreground service
+        // that should survive activity destruction (backgrounding). The user
+        // disconnects explicitly via the Disconnect button.
         super.onDestroy()
     }
 

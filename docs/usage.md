@@ -31,7 +31,7 @@ The client waits for the server's `Hello`, responds with `HelloBack`, then handl
 
 ## Disconnect
 
-**Disconnect** stops the service. So does leaving the activity (`onDestroy` calls `stopService`). The notification goes away when the service is destroyed. There is no separate "keep running in the background" control.
+**Disconnect** stops the service. Leaving the activity no longer stops the service, so the connection survives backgrounding. The notification persists while connected. There is no separate "keep running in the background" control — the foreground service is always active while connected.
 
 ## Accessibility button
 

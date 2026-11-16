@@ -41,9 +41,9 @@ However, the socket it uses (`SocketBarrierTransport`) does not implement a work
 
 The status line receives `CONNECTING`, `HANDSHAKE`, and `CONNECTED` callbacks now that the listener is wired. `CONNECTING` and `HANDSHAKE` are not notified by `BarrierClient.connect()` (only `CONNECTED` is, via `handleSetOptions`), so the status jumps from `DISCONNECTED` to `CONNECTED` on a successful handshake.
 
-Tapping **Disconnect** stops the service. Leaving the activity also stops it (`onDestroy`).
+Tapping **Disconnect** stops the service. Leaving the activity no longer stops the service (`onDestroy` does not call `stopService`), so the connection survives backgrounding. The service is stopped only by explicit Disconnect or force-stop.
 
-If the client reaches `DISCONNECTED` (server close), the service's `clientListener` wrapper no longer calls `stopSelf()`. The reconnect scope survives. The service is stopped by the activity's Disconnect button or `onDestroy`.
+If the client reaches `DISCONNECTED` (server close), the service's `clientListener` wrapper no longer calls `stopSelf()`. The reconnect scope survives. The service stays alive for reconnect attempts.
 
 ## Accessibility service
 

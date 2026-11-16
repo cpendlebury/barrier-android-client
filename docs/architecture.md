@@ -84,7 +84,7 @@ Breaks on that path, in order:
 - `CBYE`, version errors, and `EBSY` / `EUNK` / `EBAD` call `closeTransport`. If the previous state was `CONNECTED`, that schedules reconnect unless `disconnect()` set `userInitiatedClose`.
 - `DFTR` and `DDRG` are ignored. `CINN` / `COUT` update screen sequence and notify `ScreenEntered` / `ScreenLeft`, then send `CNOP`. The activity ignores those two events.
 
-Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In the service that would be `serviceScope`. `onDestroy` cancels that scope. The service no longer calls `stopSelf()` on `DISCONNECTED`; reconnect survives a server drop. The service is stopped by the activity's Disconnect button or `onDestroy`.
+Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In the service that would be `serviceScope`. `onDestroy` cancels that scope. The service no longer calls `stopSelf()` on `DISCONNECTED`; reconnect survives a server drop. The service is stopped by the activity's Disconnect button. `onDestroy` does not stop the service, so the connection survives activity recreation. The activity re-attaches its listener to a running service via `BarrierForegroundService.instance`.
 
 ## Accessibility service
 
