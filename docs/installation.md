@@ -1,6 +1,6 @@
 # Installation
 
-This page is for building and installing the debug APK, and for running unit tests. Installing the APK does not produce a working Barrier client. Read [Status and limitations](limitations.md) first.
+This page is for building and installing the debug APK, and for running unit tests. The app connects to a Barrier server and reaches `CONNECTED`, but input injection is limited to discrete gestures and clipboard-based text. Read [Status and limitations](limitations.md) first.
 
 There is no downloadable release. Clone the repository and build it.
 

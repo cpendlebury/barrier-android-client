@@ -9,7 +9,7 @@ The protocol layer can run without Android, apart from `SocketBarrierTransport`.
 ```text
 app/src/main/java/com/crrpendlebury/barrierandroid/
 ├── MainActivity.kt                  # XML form, clipboard helpers, listener
-├── BarrierForegroundService.kt      # Foreground notification; does not start the client
+├── BarrierForegroundService.kt      # Hosts BarrierClient, foreground notification, wake lock
 ├── accessibility/
 │   └── BarrierAccessibilityService.kt
 └── protocol/

@@ -1,6 +1,6 @@
 # Configuration
 
-There is no settings screen beyond the three fields on the main activity. Nothing is persisted. Host, port, and client name are read once, when **Connect** is tapped, and then dropped on the floor by the service bug described in [limitations](limitations.md).
+There is no settings screen beyond the three fields on the main activity. Nothing is persisted. Host, port, and client name are read once, when **Connect** is tapped, and passed to the foreground service via `PendingConnection`.
 
 ## Fields
 
