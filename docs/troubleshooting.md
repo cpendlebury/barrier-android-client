@@ -34,9 +34,9 @@ Those strings are only set from `handleClipboardData`, which only runs from `onC
 
 `--offline` is for a machine that already cached the dependencies. A fresh clone needs network. Remove `--offline` and retry.
 
-## The Gradle project is called FoodDiary
+## The Gradle project name
 
-`settings.gradle.kts` still has `rootProject.name = "FoodDiary"`. The app you install is still `com.crrpendlebury.barrierandroid` / launcher name BarrierAndroid. The Gradle name is a template leftover, not a second app.
+`settings.gradle.kts` sets `rootProject.name = "BarrierAndroid"`. The Gradle name is informational only; it is not the application id (`com.crrpendlebury.barrierandroid`) or the launcher label (`BarrierAndroid`).
 
 ## Tests pass but the phone does nothing
 

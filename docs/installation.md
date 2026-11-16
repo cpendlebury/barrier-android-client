@@ -54,4 +54,4 @@ That runs the JVM unit tests only. There are no instrumented tests that talk to 
 |------|--------|---------|
 | Launcher label | BarrierAndroid | `app_name` in `strings.xml` |
 | Application id | `com.crrpendlebury.barrierandroid` | Install id |
-| Gradle project name | FoodDiary | Leftover in `settings.gradle.kts`. Ignore it when looking for the app |
+| Gradle project name | BarrierAndroid | Set in `settings.gradle.kts`. Informational only; not the app id or label |

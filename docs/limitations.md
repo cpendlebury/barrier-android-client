@@ -85,7 +85,7 @@ The notification text is fixed: "Waiting for Barrier server". It is not updated 
 
 ## Other leftovers
 
-- `settings.gradle.kts` still sets `rootProject.name = "FoodDiary"`. That is not the application id or the launcher name.
+- `settings.gradle.kts` sets `rootProject.name = "BarrierAndroid"`. The application id and launcher name are unchanged by that string.
 - Compose, Retrofit, and Gson are on the classpath. The UI is XML views. Nothing calls Retrofit or Gson.
 - Version in the manifest is the template `versionName` 1.0 / `versionCode` 1. That is not a release.
 - File-transfer (`DFTR`) and drag (`DDRG`) packets are decoded and ignored.
