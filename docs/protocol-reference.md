@@ -57,7 +57,7 @@ Unknown 4-byte commands return null, and the socket reader then stops. These com
 | `DFTR` | `FileTransferPacket` | u8 mark, u32 size, bytes from payload offset 9. Decoded and ignored |
 | `DDRG` | `DragInfoPacket` | u16 count, u32 size, bytes from payload offset 10. Decoded and ignored |
 
-`DINF` encode writes 14 bytes of parameters (7 × u16) after the command. The app never sets width and height, so those fields are 0.
+`DINF` encode writes 14 bytes of parameters (7 × u16) after the command. Width and height are now set from display metrics in the foreground service.
 
 ## What the client sends
 

@@ -20,7 +20,7 @@ A future working build would be configured like any other Barrier client:
 - A screen exists whose name matches the client name exactly.
 - Encryption must match whatever the client actually speaks. This build speaks neither Barrier TLS nor plaintext TCP.
 
-This client would also currently advertise a 0×0 screen (`screenWidth` / `screenHeight` are never set), which a Barrier server will not treat as a usable display.
+Screen dimensions are now set from `resources.displayMetrics` in the foreground service before connect, so `DINF` advertises the real device resolution.
 
 ## Options the client understands
 
