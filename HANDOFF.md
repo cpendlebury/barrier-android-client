@@ -8,6 +8,7 @@
 ## Current phase status
 - Phase 1 (client protocol core) — **COMPLETE AND GREEN**.
 - Phase 2 (Accessibility Service injection + clipboard + foreground service) — **NEAR COMPLETE**, compiles + builds + tests green. Input delivery via accessibility service implemented; discrete-key limitation addressed via global actions; FGS hosting added.
+- Phase 3 (hardening) — **IN PROGRESS**: reconnect with exponential backoff implemented; service stopSelf on unexpected disconnect; screensaver/options handling stubbed.
 
 ## Implemented (Phase 1)
 - Protocol layer (`app/src/main/java/com/crrpendlebury/barrierandroid/protocol/`): BarrierClient, BarrierPacket, PacketCodec, BarrierTransport, SocketBarrierTransport, BarrierModels, BarrierCommand, BarrierConstants.
@@ -36,6 +37,17 @@
 5. **Tests**: added `client notifies clipboard data received from server` (DCLP → callback + state retention). BarrierClientTest now **7/7**, PacketCodecTest **16/16** → **23 tests total, 0 failures**.
 6. **Text injection** (this continuation, per plan update): added `BarrierAccessibilityService.injectText(text)` using public `AccessibilityNodeInfo.ACTION_SET_TEXT` + `performAction(ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, ...)` on the focused editable node resolved via `getRootInActiveWindow()` + recursive editable/focused search (depth-capped). MainActivity `handleClipboardData` now calls `service.injectText(text)` in addition to storing the DCLP text into the ClipboardManager.
 
+## Implemented (Phase 3 — this session)
+1. **Reconnect with exponential backoff** (`BarrierClient.kt`):
+   - `connect()` stores host/port/useTls and delegates to `performConnect()`.
+   - `closeTransport()` (server-initiated close) now schedules a reconnect when the client was `CONNECTED`.
+   - `scheduleReconnect()` launches a job with `INITIAL_RECONNECT_BACKOFF_MILLIS` (1s) → `MAX_RECONNECT_BACKOFF_MILLIS` (30s), doubling each attempt, skipping retries when `userInitiatedClose` is set.
+   - `disconnect()` is user-initiated: sets `userInitiatedClose`, cancels the reconnect job, does not reschedule.
+   - `performConnect()` re-opens transport + re-sends Hello, restoring `CONNECTING`/`HANDSHAKE`.
+2. **Constants** (`BarrierConstants.kt`): `INITIAL_RECONNECT_BACKOFF_MILLIS`, `MAX_RECONNECT_BACKOFF_MILLIS`.
+3. **Service stopSelf on unexpected disconnect** (`BarrierForegroundService.kt`): `clientListener` wrapper forwards lifecycle to the hosting activity and calls `stopSelf()` (main-thread posted) when the client reaches `DISCONNECTED`.
+4. **Tests**: updated `client disconnects on server close` to assert reconnect → `HANDSHAKE` (2 Hellos); added `client does not reconnect after user disconnect`. BarrierClientTest **8/8**, PacketCodecTest **16/16** → **24 tests total, 0 failures**.
+
 ## Protocol facts encoded (Barrier v2.4.0 / protocol v1.6)
 - Frame: u32 **BE** length + payload; command (4 chars; `"Barrier"` greeting = 7 chars), BE int16/int32 params, BE32 string length + UTF-8.
 - Greeting decode: payload size 11 → `Hello(maj, min)`; size > 11 → `HelloBack(maj, min, name)` (BE32 name-len at offset 11, name at 15).
@@ -63,11 +75,10 @@
 - FGS uses `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` — requires the `FOREGROUND_SERVICE_SPECIAL_USE` permission + manifest type (added); runtime start restrictions apply on Android 14+ (FGS-from-background blocked — start from activity is compliant).
 
 ## Immediate next steps
-1. Text injection via `ACTION_SET_TEXT` — **implemented** this session; needs on-device validation (accessibility service enabled + focused editable field present).
-2. Phase 3 hardening: reconnect/backoff, screensaver/options events, file transfer/drag info stubs.
+1. Phase 3 remaining: screensaver/options event handling (CSEC/CROP/DSOP) — currently stubbed; flesh out; file transfer/drag info stubs.
+2. UI/service wiring hardening: accessibility service enabled status surfacing, error surfacing.
 3. Remaining key injection: arbitrary keycodes (letters, modifiers) still require a non-public injection path (hidden `InputManager`/reflection) — evaluate feasibility vs. physical-keyboard/IME approach.
-4. Clipboard: actual paste/injection use — received DCLP is stored into device clipboard and injected via `ACTION_SET_TEXT`; further use (e.g., per-app focused window handling) remains future work.
-5. UI/service wiring hardening: accessibility service enabled status surfacing, error surfacing, stop service cleanly on client disconnect (service should `stopSelf()` when client reaches DISCONNECTED unexpectedly).
+4. Commit and push this Phase 3 reconnect work.
 
 ## Handy commands
 - Tests: `./gradlew :app:testDebugUnitTest --offline`

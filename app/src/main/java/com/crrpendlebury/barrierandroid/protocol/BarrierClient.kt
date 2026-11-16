@@ -35,6 +35,15 @@ class BarrierClient(
     private var keepAliveWatchdogJob: Job? = null
     private var lastServerActivityNanos: Long = 0L
 
+    private var reconnectJob: Job? = null
+    private var backoffMillis: Long = INITIAL_RECONNECT_BACKOFF_MILLIS
+    @Volatile
+    private var userInitiatedClose = false
+
+    private var currentServerHost: String? = null
+    private var currentServerPort: Int? = null
+    private var currentServerUseTls: Boolean? = null
+
     /** Clipboard data most recently received from the server (DCLP). */
     var receivedClipboardData: BarrierPacket.ClipboardDataPacket? = null
 
@@ -49,15 +58,17 @@ class BarrierClient(
 
     /** Opens a connection to the Barrier server and runs the handshake. */
     suspend fun connect(serverHost: String, serverPort: Int, useTls: Boolean) {
-        transport.onPacket = { packet -> scope.launch { handlePacket(packet) } }
-        state = BarrierClientState.CONNECTING
-        transport.connect(serverHost, serverPort, useTls)
-        send(BarrierPacket.Hello(PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION))
-        state = BarrierClientState.HANDSHAKE
+        currentServerHost = serverHost
+        currentServerPort = serverPort
+        currentServerUseTls = useTls
+        performConnect(serverHost, serverPort, useTls)
     }
 
-    /** Closes the connection and stops keepalives. */
+    /** Closes the connection and stops keepalives. Does not schedule a reconnect. */
     fun disconnect() {
+        userInitiatedClose = true
+        reconnectJob?.cancel()
+        reconnectJob = null
         stopKeepAlive()
         transport.close()
         state = BarrierClientState.DISCONNECTED
@@ -403,8 +414,49 @@ class BarrierClient(
 
     private fun closeTransport() {
         stopKeepAlive()
+        val wasConnected = state == BarrierClientState.CONNECTED
         transport.close()
         state = BarrierClientState.DISCONNECTED
         notifyStateChanged(BarrierClientState.DISCONNECTED)
+        // Server-initiated close while connected: schedule a reconnect with
+        // exponential backoff. User-initiated disconnects bypass this path.
+        if (wasConnected) {
+            scheduleReconnect()
+        }
+    }
+
+    /** Schedules a reconnect attempt with exponential backoff after a drop. */
+    private fun scheduleReconnect() {
+        if (reconnectJob?.isActive == true) {
+            return
+        }
+        backoffMillis = INITIAL_RECONNECT_BACKOFF_MILLIS
+        reconnectJob = scope.launch {
+            while (isActive) {
+                delay(backoffMillis)
+                if (userInitiatedClose) {
+                    return@launch
+                }
+                val host = currentServerHost ?: return@launch
+                val port = currentServerPort ?: return@launch
+                val useTls = currentServerUseTls ?: false
+                backoffMillis = minOf(backoffMillis * 2, MAX_RECONNECT_BACKOFF_MILLIS)
+                try {
+                    performConnect(host, port, useTls)
+                    // Connected; wait for the next failure to reschedule.
+                    break
+                } catch (e: Exception) {
+                    // Attempt failed; loop applies backoff and retries.
+                }
+            }
+        }
+    }
+
+    private suspend fun performConnect(serverHost: String, serverPort: Int, useTls: Boolean) {
+        transport.onPacket = { packet -> scope.launch { handlePacket(packet) } }
+        state = BarrierClientState.CONNECTING
+        transport.connect(serverHost, serverPort, useTls)
+        send(BarrierPacket.Hello(PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION))
+        state = BarrierClientState.HANDSHAKE
     }
 }

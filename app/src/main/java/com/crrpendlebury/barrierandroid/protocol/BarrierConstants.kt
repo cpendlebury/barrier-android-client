@@ -13,6 +13,10 @@ const val DEFAULT_CLIENT_NAME = "AndroidBarrierClient"
 const val KEEP_ALIVE_INTERVAL_MILLIS = 3_000L
 const val KEEP_ALIVES_UNTIL_DEATH = 3.0
 
+/** Reconnect backoff bounds (ms) for the Barrier client. */
+const val INITIAL_RECONNECT_BACKOFF_MILLIS = 1_000L
+const val MAX_RECONNECT_BACKOFF_MILLIS = 30_000L
+
 /** Protocol limits. */
 const val PROTOCOL_MAX_MESSAGE_LENGTH = 4 * 1024 * 1024
 const val PROTOCOL_MAX_STRING_LENGTH = 1024 * 1024

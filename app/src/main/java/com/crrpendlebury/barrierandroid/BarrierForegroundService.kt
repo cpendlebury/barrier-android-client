@@ -8,10 +8,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.crrpendlebury.barrierandroid.protocol.BarrierClient
-import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
+import com.crrpendlebury.barrierandroid.protocol.BarrierError
+import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientListener
+import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
+import com.crrpendlebury.barrierandroid.protocol.BarrierClientState
 import com.crrpendlebury.barrierandroid.protocol.SocketBarrierTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +36,27 @@ class BarrierForegroundService : Service() {
     private var client: BarrierClient? = null
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Forwards client lifecycle to the hosting activity and stops the service on unexpected disconnect. */
+    private val clientListener = object : BarrierClientListener {
+        override fun onStateChanged(state: BarrierClientState) {
+            connectionListener?.onStateChanged(state)
+            if (state == BarrierClientState.DISCONNECTED) {
+                // Unexpected disconnect: release the foreground service.
+                mainHandler.post { stopSelf() }
+            }
+        }
+
+        override fun onInputEvent(event: BarrierInputEvent) {
+            connectionListener?.onInputEvent(event)
+        }
+
+        override fun onError(error: BarrierError) {
+            connectionListener?.onError(error)
+        }
+    }
 
     var connectionListener: BarrierClientListener? = null
         private set
@@ -81,7 +107,7 @@ class BarrierForegroundService : Service() {
                 onPacket = null,
             ),
             scope = serviceScope,
-            listener = pending.listener,
+            listener = clientListener,
         ).also { newClient ->
             newClient.onClipboardGrab = pending.onClipboardGrab
             newClient.onClipboardData = pending.onClipboardData

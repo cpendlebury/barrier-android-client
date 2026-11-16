@@ -2,6 +2,7 @@ package com.crrpendlebury.barrierandroid.protocol
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -119,10 +120,36 @@ class BarrierClientTest {
 
         transport.emit(BarrierPacket.ClosePacket())
         runCurrent()
+        advanceTimeBy(INITIAL_RECONNECT_BACKOFF_MILLIS)
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf(BarrierClientState.CONNECTED, BarrierClientState.DISCONNECTED), states)
+
+        // Server closed the connection; the client schedules a reconnect with
+        // backoff and re-runs the handshake.
+        assertEquals(BarrierClientState.HANDSHAKE, client.currentState)
+        val hellos = transport.sentPackets.filterIsInstance<BarrierPacket.Hello>()
+        assertEquals(2, hellos.size)
+    }
+
+    @Test
+    fun `client does not reconnect after user disconnect`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        client.disconnect()
+        runCurrent()
         advanceUntilIdle()
 
         assertEquals(BarrierClientState.DISCONNECTED, client.currentState)
-        assertEquals(listOf(BarrierClientState.CONNECTED, BarrierClientState.DISCONNECTED), states)
     }
 
     @Test
