@@ -57,13 +57,13 @@ The injection methods are still not a working input path:
 
 ## Network
 
-The UI always asks for TLS (`useTls = true`). There is no toggle.
+The UI always asks for TLS (`useTls = true`). There is no toggle. `BarrierClient.connect` receives the flag but `SocketBarrierTransport` now uses it: plain `java.net.Socket` for `useTls == false`, an `SSLSocket` with a trust-all `TrustManager` and hostname verification disabled for `useTls == true`. `connect()` no longer double-connects.
 
-`SocketBarrierTransport.createSocket()` looks up `SSLSocketFactory.createSSLSocket(String, int)`. That method is not part of the platform API, so the lookup fails. The catch block then calls `SSLSocketFactory.createSocket(host, port)`, which is still an SSL socket, and `connect()` calls `Socket.connect` on it again. Neither branch constructs a plain `java.net.Socket`. This is not Barrier's TLS (self-signed certificate and fingerprint check). A normal Barrier server, with or without encryption, will not complete a handshake through this helper.
+The TLS path is still not Barrier's TLS. Barrier uses a self-signed certificate with fingerprint verification. This client trusts every certificate, so it is not secure against a MITM on an untrusted network. A future version should verify the server fingerprint the way Barrier's GUI does.
 
-Socket read errors are swallowed. They do not become `BarrierError.ConnectionFailed`. That error is only raised for `EBSY`, `EUNK`, and `EBAD`. A failed `connect()` in the service is not caught, so a later fix that actually calls it would still fail the coroutine quietly unless a handler is added.
+Socket read errors now invoke `onConnectionLost`, which calls `BarrierClient.closeTransport()`. That surfaces as a `DISCONNECTED` state and schedules reconnect (if the client was connected). `BarrierClient.connect` and `performConnect` catch transport failures and call `notifyError(BarrierError.ConnectionFailed(...))`, so a failed `connect()` is no longer silent. The foreground service wraps `connect()` in `runCatching`.
 
-`screenWidth` and `screenHeight` are now set from `resources.displayMetrics` in the service before connect, so `DINF` advertises the real device resolution. Previously both stayed 0.
+`screenWidth` and `screenHeight` are set from `resources.displayMetrics` in the service before connect, so `DINF` advertises the real device resolution.
 
 ## Options and reconnect do less than the names suggest
 

@@ -17,7 +17,7 @@ app/src/main/java/com/crrpendlebury/barrierandroid/
     ├── BarrierPacket.kt             # Encode/decode of payload bodies
     ├── PacketCodec.kt               # 4-byte big-endian length prefix
     ├── BarrierTransport.kt
-    ├── SocketBarrierTransport.kt    # Not a working Barrier socket
+    ├── SocketBarrierTransport.kt    # Plain + TLS socket; TLS is trust-all, not Barrier fingerprint TLS
     ├── BarrierModels.kt             # State, errors, input events, listener
     ├── BarrierCommand.kt
     └── BarrierConstants.kt
@@ -65,7 +65,7 @@ Barrier server
 
 Breaks on that path, in order:
 
-1. `SocketBarrierTransport.createSocket()` does not open a plain TCP socket and does not implement Barrier TLS. `connect()` is invoked on a socket that `createSocket(host, port)` has already connected. This is the current blocker.
+1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` with a trust-all `TrustManager` for TLS. `connect()` no longer double-connects. TLS is still not Barrier's fingerprint-verified TLS. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
 2. The accessibility service is now declared with meta-data, but `injectPointer` / `injectKey` / `injectText` do not implement the events they claim to. See [limitations](limitations.md).
 3. The service's `stopSelf()` on `DISCONNECTED` cancels the reconnect scope.
 
