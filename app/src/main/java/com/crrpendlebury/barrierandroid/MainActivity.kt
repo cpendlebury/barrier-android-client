@@ -41,6 +41,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var statusTextView: TextView
     private lateinit var accessibilityStatusTextView: TextView
     private lateinit var openAccessibilitySettingsButton: Button
+    private lateinit var mouseMovementCheckBox: CheckBox
     private lateinit var errorTextView: TextView
 
     private var lastPointerX = 0f
@@ -75,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 updateStatus(state)
                 if (state == BarrierClientState.CONNECTED) {
                     errorTextView.text = ""
+                    BarrierAccessibilityService.instance?.mouseMovementEnabled = mouseMovementCheckBox.isChecked
                 }
             }
         }
@@ -146,11 +149,15 @@ class MainActivity : ComponentActivity() {
         statusTextView = findViewById(R.id.statusTextView)
         accessibilityStatusTextView = findViewById(R.id.accessibilityStatusTextView)
         openAccessibilitySettingsButton = findViewById(R.id.openAccessibilitySettingsButton)
+        mouseMovementCheckBox = findViewById(R.id.mouseMovementCheckBox)
         errorTextView = findViewById(R.id.errorTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
         disconnectButton.setOnClickListener { stopService(Intent(this, BarrierForegroundService::class.java)) }
         openAccessibilitySettingsButton.setOnClickListener { BarrierAccessibilityService.openSettings(this) }
+        mouseMovementCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            BarrierAccessibilityService.instance?.mouseMovementEnabled = isChecked
+        }
 
         updateStatus(BarrierClientState.DISCONNECTED)
         updateAccessibilityStatus()

@@ -67,6 +67,23 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var lastY = 0f
 
     /**
+     * Tracks the last position for which a gesture was actually dispatched.
+     * Used to throttle move gestures: only send when the pointer has moved
+     * more than [MOVE_THROTTLE_PX] from the last dispatched position.
+     */
+    private var lastDispatchedX = 0f
+    private var lastDispatchedY = 0f
+
+    /**
+     * When false, pure movement (ACTION_MOVE) does not create a gesture.
+     * Button presses, releases, and scrolls still do. This eliminates
+     * phantom keystrokes on on-screen keyboards caused by movement
+     * strokes passing over key areas. Toggle via [mouseMovementEnabled].
+     */
+    @Volatile
+    var mouseMovementEnabled: Boolean = true
+
+    /**
      * Dispatches a gesture for the requested pointer action.
      *
      * `dispatchGesture` creates discrete, fire-and-forget gestures. It cannot
@@ -78,8 +95,11 @@ class BarrierAccessibilityService : AccessibilityService() {
      *   The framework has no "release held button" gesture, so this is a
      *   best-effort tap. A real hold needs [android.view.InputManager]
      *   injection, which is not public.
-     * - [android.view.MotionEvent.ACTION_MOVE]: a short stroke from the last
-     *   position to (x, y). Duration is [POINTER_STROKE_DURATION_MS].
+     * - [android.view.MotionEvent.ACTION_MOVE]: if [mouseMovementEnabled] is
+     *   true and the pointer has moved more than [MOVE_THROTTLE_PX] from
+     *   the last dispatched position, a short stroke (duration
+     *   [POINTER_STROKE_DURATION_MS]) from the last position to (x, y).
+     *   Otherwise returns false without dispatching (throttled / disabled).
      * - [android.view.MotionEvent.ACTION_SCROLL]: a vertical swipe. x/y deltas
      *   are not passed in (the caller only gives a point), so this swipes
      *   down a fixed amount. A real scroll needs axis data, which
@@ -88,20 +108,38 @@ class BarrierAccessibilityService : AccessibilityService() {
      *
      * [action] is now consulted. Earlier versions ignored it.
      *
-     * @return whatever [dispatchGesture] returns. True means the framework
-     * accepted the gesture object, not that a pointer event was delivered to
-     * an app.
+     * @return whatever [dispatchGesture] returns, or false if throttled/disabled.
+     * True means the framework accepted the gesture object, not that a
+     * pointer event was delivered to an app.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         val gesture = when (action) {
             MotionEvent.ACTION_DOWN -> tapGesture(x, y)
             MotionEvent.ACTION_UP -> tapGesture(lastX, lastY)
-            MotionEvent.ACTION_MOVE -> strokeGesture(lastX, lastY, x, y)
+            MotionEvent.ACTION_MOVE -> {
+                if (!mouseMovementEnabled) {
+                    lastX = x
+                    lastY = y
+                    return false
+                }
+                val dx = x - lastDispatchedX
+                val dy = y - lastDispatchedY
+                if (dx * dx + dy * dy < MOVE_THROTTLE_PX * MOVE_THROTTLE_PX) {
+                    lastX = x
+                    lastY = y
+                    return false
+                }
+                strokeGesture(lastX, lastY, x, y)
+            }
             MotionEvent.ACTION_SCROLL -> scrollGesture(x, y)
             else -> tapGesture(x, y)
         }
         lastX = x
         lastY = y
+        if (action == MotionEvent.ACTION_MOVE) {
+            lastDispatchedX = x
+            lastDispatchedY = y
+        }
         return dispatchGesture(gesture, gestureResultCallback, handler)
     }
 
@@ -224,9 +262,10 @@ class BarrierAccessibilityService : AccessibilityService() {
     companion object {
         private const val DISPLAY_ID = 0
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
-        private const val POINTER_STROKE_DURATION_MS = 50L
+        private const val POINTER_STROKE_DURATION_MS = 20L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
+        private const val MOVE_THROTTLE_PX = 8f
 
         var instance: BarrierAccessibilityService? = null
             private set

@@ -11,8 +11,9 @@ The screen is a small form. It does not join a Barrier server. This page describ
 | Client Name | `clientNameEditText` | If empty after trim, the code uses `AndroidBarrierClient` |
 | Connect | `connectButton` | Starts the foreground service. Does not open a socket. See below |
 | Disconnect | `disconnectButton` | `stopService` on `BarrierForegroundService` |
-| Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings. With this manifest it stays disabled |
+| Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings |
 | Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
+| Mouse movement gestures | `mouseMovementCheckBox` | Toggles whether pure movement creates gestures. Disable to avoid phantom keystrokes on on-screen keyboards |
 | Error line | `errorTextView` | Red text for the cases listed below |
 | Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
 
@@ -43,6 +44,8 @@ The status text is refreshed in `onCreate` and `onResume`.
 ## Clipboard and typing
 
 Nothing in the running app reads or writes the clipboard, and nothing injects text or pointer events. Those methods exist on `BarrierAccessibilityService` and `MainActivity`, but they run only when a `BarrierClient` listener fires. Connect never creates that client.
+
+**Clipboard-based typing path**: When the server pushes clipboard data (DCLP), the app stores it into the device clipboard and injects it into the focused editable field via `ACTION_SET_TEXT`. To type from the server, copy text on the server — it will be pushed to the phone and injected. Keystroke-by-keystroke typing is not possible (no public key injection API).
 
 If that path is fixed later, the clipboard handler as written will:
 
