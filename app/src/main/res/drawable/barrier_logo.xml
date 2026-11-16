@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Barrier logo: stylized "B" with a vertical barrier motif -->
+    <!-- Left vertical bar -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M20,15 L20,105 L35,105 L35,15 Z" />
+    <!-- Top horizontal bar -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M20,15 L75,15 L75,30 L20,30 Z" />
+    <!-- Middle horizontal bar -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M20,52.5 L65,52.5 L65,67.5 L20,67.5 Z" />
+    <!-- Bottom horizontal bar -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M20,90 L75,90 L75,105 L20,105 Z" />
+    <!-- Right vertical accent (barrier gate) -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M75,15 L90,15 L90,105 L75,105 Z" />
+    <!-- Top-right diagonal -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M90,15 L105,30 L90,30 Z" />
+    <!-- Bottom-right diagonal -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M90,90 L105,105 L90,105 Z" />
+</vector>
