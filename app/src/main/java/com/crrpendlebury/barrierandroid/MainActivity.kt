@@ -1,28 +1,24 @@
 package com.crrpendlebury.barrierandroid
 
 import android.content.ClipboardManager
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService
-import com.crrpendlebury.barrierandroid.protocol.BarrierClient
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientListener
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientState
 import com.crrpendlebury.barrierandroid.protocol.BarrierError
 import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
+import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
-import com.crrpendlebury.barrierandroid.protocol.SocketBarrierTransport
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -32,12 +28,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
     private lateinit var statusTextView: TextView
-
-    private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private var barrierClient: BarrierClient? = null
-    private var lastPointerX = 0f
-    private var lastPointerY = 0f
 
     private val barrierClientListener = object : BarrierClientListener {
         override fun onStateChanged(state: BarrierClientState) {
@@ -78,11 +68,11 @@ class MainActivity : ComponentActivity() {
                     // Screen tracking is handled separately (Phase 3 hardening).
                 }
 
-                is BarrierInputEvent.KeyDown, is BarrierInputEvent.KeyRepeat, is BarrierInputEvent.KeyUp -> {
-                    // Discrete key injection via the framework key dispatch is not exposed
-                    // through the accessibility service API surface in compileSdk 35; key
-                    // events delivered through the service's onKeyEvent are handled there.
-                }
+                is BarrierInputEvent.KeyDown -> service.injectKey(event.keyId, KeyEvent.ACTION_DOWN)
+
+                is BarrierInputEvent.KeyRepeat -> service.injectKey(event.keyId, KeyEvent.ACTION_DOWN)
+
+                is BarrierInputEvent.KeyUp -> service.injectKey(event.keyId, KeyEvent.ACTION_UP)
             }
         }
 
@@ -90,6 +80,9 @@ class MainActivity : ComponentActivity() {
             runOnUiThread { updateStatus(error) }
         }
     }
+
+    private var lastPointerX = 0f
+    private var lastPointerY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,15 +95,13 @@ class MainActivity : ComponentActivity() {
         statusTextView = findViewById(R.id.statusTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
-        disconnectButton.setOnClickListener { barrierClient?.disconnect() }
+        disconnectButton.setOnClickListener { stopService(Intent(this, BarrierForegroundService::class.java)) }
 
         updateStatus(BarrierClientState.DISCONNECTED)
     }
 
     override fun onDestroy() {
-        barrierClient?.disconnect()
-        stopService(Intent(this, BarrierAccessibilityService::class.java))
-        clientScope.cancel()
+        stopService(Intent(this, BarrierForegroundService::class.java))
         super.onDestroy()
     }
 
@@ -119,23 +110,15 @@ class MainActivity : ComponentActivity() {
         val port = serverPortEditText.text.toString().toIntOrNull() ?: DEFAULT_BARRIER_PORT
         val clientName = clientNameEditText.text.toString().trim().ifEmpty { DEFAULT_CLIENT_NAME }
 
-        barrierClient?.disconnect()
-        val client = BarrierClient(
+        BarrierForegroundService.pendingConnection = BarrierForegroundService.PendingConnection(
+            host = host,
+            port = port,
             clientName = clientName,
-            transport = SocketBarrierTransport(
-                host = host,
-                port = port,
-                useTls = true,
-                scope = clientScope,
-                onPacket = null,
-            ),
-            scope = clientScope,
             listener = barrierClientListener,
+            onClipboardGrab = { clipboardId, seq -> readClipboardBytes() },
+            onClipboardData = { packet -> handleClipboardData(packet) },
         )
-        client.onClipboardGrab = { clipboardId, seq -> readClipboardBytes() }
-        barrierClient = client
-        runCatching { startService(Intent(this, BarrierAccessibilityService::class.java)) }
-        clientScope.launch { client.connect(serverHost = host, serverPort = port, useTls = true) }
+        runCatching { startService(Intent(this, BarrierForegroundService::class.java)) }
     }
 
     private fun readClipboardBytes(): ByteArray? {
@@ -144,6 +127,20 @@ class MainActivity : ComponentActivity() {
         val item = clip.getItemAt(0) ?: return null
         val text = item.text?.toString() ?: return ByteArray(0)
         return text.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun handleClipboardData(packet: BarrierPacket.ClipboardDataPacket) {
+        // Store clipboard data received from the server (DCLP) into the device
+        // clipboard so subsequent clipboard grabs (CCLP) can serve it and so the
+        // content is available for paste/injection use.
+        val text = String(packet.data, 0, packet.data.size, Charsets.UTF_8)
+        runOnUiThread {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("barrier", text))
+            // Deliver received text into the focused editable app via the
+            // accessibility service (ACTION_SET_TEXT).
+            BarrierAccessibilityService.instance?.injectText(text)
+        }
     }
 
     private fun updateStatus(state: BarrierClientState) {

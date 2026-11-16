@@ -36,7 +36,10 @@ class BarrierClient(
     private var lastServerActivityNanos: Long = 0L
 
     /** Clipboard data most recently received from the server (DCLP). */
-    private var receivedClipboardData: BarrierPacket.ClipboardDataPacket? = null
+    var receivedClipboardData: BarrierPacket.ClipboardDataPacket? = null
+
+    /** Invoked when clipboard data is received from the server (DCLP). */
+    var onClipboardData: ((clipboardData: BarrierPacket.ClipboardDataPacket) -> Unit)? = null
 
     /** Supplies clipboard bytes when the server requests a clipboard grab (CCLP -> DCLP). */
     var onClipboardGrab: ((clipboardId: Int, seq: Int) -> ByteArray?)? = null
@@ -338,8 +341,9 @@ class BarrierClient(
     }
 
     private suspend fun handleClipboardData(packet: BarrierPacket.ClipboardDataPacket) {
-        // Clipboard data received from the server; retained for Phase 2 clipboard use.
+        // Clipboard data received from the server; retained and surfaced to the host.
         receivedClipboardData = packet
+        onClipboardData?.invoke(packet)
     }
 
     private suspend fun handleScreenSaver(packet: BarrierPacket.ScreenSaverPacket) {

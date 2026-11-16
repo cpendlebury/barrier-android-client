@@ -167,4 +167,40 @@ class BarrierClientTest {
         assertEquals(0, dclp.clipboardId)
         assertEquals(5, dclp.seq)
     }
+
+    @Test
+    fun `client notifies clipboard data received from server`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val clipboardPackets = mutableListOf<BarrierPacket.ClipboardDataPacket>()
+        val client = BarrierClient(
+            clientName = "AndroidBarrierClient",
+            transport = transport,
+            scope = backgroundScope,
+        )
+        client.onClipboardData = { clipboardPackets.add(it) }
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(
+            BarrierPacket.ClipboardDataPacket(
+                clipboardId = 0,
+                seq = 7,
+                mark = 7,
+                data = byteArrayOf(1, 2, 3),
+            ),
+        )
+        runCurrent()
+        advanceUntilIdle()
+
+        val dclp = client.receivedClipboardData
+        assertEquals(0, dclp?.clipboardId)
+        assertEquals(7, dclp?.seq)
+        assertEquals(1, clipboardPackets.size)
+        assertEquals(dclp, clipboardPackets.single())
+    }
 }
