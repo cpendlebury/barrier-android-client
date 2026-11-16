@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.crrpendlebury.barrierandroid.protocol.BarrierClient
 import com.crrpendlebury.barrierandroid.protocol.BarrierError
@@ -70,6 +71,8 @@ class BarrierForegroundService : Service() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     /**
      * Forwards client lifecycle to the hosting activity. Does not stop the
      * service on [BarrierClientState.DISCONNECTED]: that state is published by
@@ -100,6 +103,16 @@ class BarrierForegroundService : Service() {
     override fun onCreate() = super.onCreate()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Acquire a partial wake lock so the CPU stays awake for keepalive
+        // and socket reads while the screen is off. Released in onDestroy.
+        if (wakeLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BarrierAndroid::Connection").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+
         // Read the companion property the activity actually writes. The
         // instance field of the same name was never assigned and is removed.
         val pending = Companion.pendingConnection
@@ -124,6 +137,8 @@ class BarrierForegroundService : Service() {
     override fun onDestroy() {
         stopClient()
         serviceScope.cancel()
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         super.onDestroy()
     }
 

@@ -36,6 +36,8 @@ import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
+import android.provider.Settings
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -166,6 +168,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         updateAccessibilityStatus()
+        requestBatteryOptimizationExemption()
     }
 
     override fun onDestroy() {
@@ -252,6 +255,16 @@ class MainActivity : ComponentActivity() {
             is BarrierError.ConnectionFailed -> error.message
         }
         statusTextView.text = "Barrier error: $description"
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = android.net.Uri.parse("package:$packageName")
+            }
+            runCatching { startActivity(intent) }
+        }
     }
 
     private fun updateAccessibilityStatus() {

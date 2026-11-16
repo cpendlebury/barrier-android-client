@@ -83,6 +83,8 @@ Socket read errors now invoke `onConnectionLost`, which calls `BarrierClient.clo
 
 `onStartCommand` now guards `NotificationChannel` creation (API 26) and the three-argument `startForeground` (API 29) with `SDK_INT` checks, so the service no longer crashes on Android 5.1–9. The manifest declares `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` for Android 14+.
 
+A partial wake lock is now acquired in `onStartCommand` and released in `onDestroy`, keeping the CPU awake for keepalive and socket reads while the screen is off. The app requests battery optimization exemption on resume.
+
 The notification text is still fixed: "Waiting for Barrier server". It is not updated when a connection would succeed.
 
 ## Other leftovers
