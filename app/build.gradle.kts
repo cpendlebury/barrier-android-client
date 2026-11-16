@@ -40,6 +40,10 @@ android {
 }
 
 dependencies {
+    // Compose, Retrofit, and Gson are on the classpath and unused.
+    // The UI is res/layout/activity_main.xml. Do not add a Compose screen
+    // beside that layout without removing one of them. Do not call Retrofit
+    // for Barrier; the protocol is a length-prefixed TCP session.
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

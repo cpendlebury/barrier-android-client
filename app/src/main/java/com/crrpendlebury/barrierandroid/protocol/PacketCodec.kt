@@ -1,11 +1,23 @@
 package com.crrpendlebury.barrierandroid.protocol
 
 /**
- * Framing and payload codec for the Barrier protocol.
+ * Length-prefix framing for Barrier messages.
  *
- * Every message is sent as a 32-bit big endian payload length followed by the
- * payload itself. The payload starts with the command string followed by
- * command specific parameters.
+ * A frame is a 32-bit big-endian payload length, then that many payload bytes.
+ * The payload itself (command string and parameters) is encoded by
+ * [BarrierPacket.encode] and decoded by [BarrierPacket.decode]. This object
+ * does not interpret commands.
+ *
+ * [SocketBarrierTransport] does not call [decodeFrame]. It reads the 4-byte
+ * length itself, then calls [decodePayload]. [decodeFrame] exists for tests
+ * and for any caller that already has a complete frame in one buffer. The two
+ * length parsers must stay in agreement: both are big-endian, both reject
+ * lengths above [PROTOCOL_MAX_MESSAGE_LENGTH].
+ *
+ * [decodeFrame] returns null for a short buffer, a truncated frame, or an
+ * over-long length. It does not throw. [decodePayload] returns null for an
+ * unknown command; a truncated hello-back can still throw inside
+ * [BarrierPacket.decode] because that decoder does not bounds-check the name.
  */
 object PacketCodec {
 

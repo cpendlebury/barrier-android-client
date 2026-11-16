@@ -6,6 +6,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+/**
+ * Round-trips [PacketCodec] and [BarrierPacket.encode] / [BarrierPacket.decode].
+ *
+ * These tests lock the codec this repository implements. They are not a
+ * capture of a live Barrier 2.4.0 server. A change that "fixes" a layout to
+ * match upstream must update the assertion and say so in the test name.
+ *
+ * Greeting rule under test: an 11-byte "Barrier" payload is [BarrierPacket.Hello].
+ * A longer one is [BarrierPacket.HelloBack].
+ */
 class PacketCodecTest {
 
     private fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }

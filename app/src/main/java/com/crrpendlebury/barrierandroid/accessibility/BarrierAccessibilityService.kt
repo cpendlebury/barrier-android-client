@@ -16,16 +16,24 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
- * Accessibility-based input injection service for the Barrier client.
+ * Accessibility service that is supposed to apply Barrier input on the phone.
  *
- * Receives injected [BarrierInputEvent]s from the Barrier client and forwards
- * them into the Android input pipeline via [AccessibilityService.dispatchGesture]:
- *  - pointer events (motion / button / scroll) via gesture dispatch
- *  - discrete key events via framework global action injection (`injectKey`)
- *    (the compileSdk 35 public accessibility API has no discrete key dispatch)
+ * Direction of control: the computer's keyboard and mouse are the source.
+ * This service is the sink. It does not capture the phone's own input to send
+ * upstream. [onKeyEvent] and [onMotionEvent] return without consuming events.
  *
- * The user must enable this service (system -> accessibility -> this app) before
- * injection is accepted by the framework.
+ * The system starts an accessibility service only after the user enables it.
+ * This app's manifest does not declare the required
+ * `android.accessibilityservice` meta-data resource, and there is no
+ * config XML under `res/xml/`. Android will not list this class in
+ * Settings → Accessibility, so [instance] stays null in a normal install.
+ * [isEnabled] only reads `ENABLED_ACCESSIBILITY_SERVICES`; it cannot enable
+ * the service.
+ *
+ * Even if the system did bind it, the inject methods are not a working input
+ * path. Read each method's KDoc before calling it from new code. The public
+ * compileSdk 35 surface has `dispatchGesture` and `performGlobalAction`, and
+ * no `dispatchKeyEvent`.
  */
 class BarrierAccessibilityService : AccessibilityService() {
 
@@ -52,10 +60,17 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Injects a pointer event (motion / button / scroll) into the system via
-     * accessibility gesture dispatch.
+     * Asks the framework to dispatch a gesture at ([x], [y]).
      *
-     * @return true when the framework accepted and dispatched the gesture.
+     * [action] is ignored. Move, down, up, and scroll all build the same
+     * stroke from the point to itself with start time 0 and duration 0.
+     * `dispatchGesture` commonly rejects a 0 ms stroke. This does not move a
+     * pointer, hold a button, or scroll. Callers in [com.crrpendlebury.barrierandroid.MainActivity]
+     * still pass a [android.view.MotionEvent] action; that argument is for a
+     * future implementation, not current behaviour.
+     *
+     * @return whatever [dispatchGesture] returns. True means the framework
+     * accepted the gesture object, not that a pointer event was delivered.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         val path = Path().apply {
@@ -70,12 +85,21 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Injects a discrete key event (down / repeat / up) into the system.
+     * Maps three Android key codes onto global actions. Everything else returns false.
      *
-     * The public `AccessibilityService` dispatch surface in compileSdk 35 does
-     * not expose a discrete key injection entry point, so the supported keycodes
-     * are performed through framework global actions (back / home / recents).
-     * Returns true when the framework accepted the injected action.
+     * [keyCode] is compared to [android.view.KeyEvent.KEYCODE_BACK],
+     * [android.view.KeyEvent.KEYCODE_HOME], and
+     * [android.view.KeyEvent.KEYCODE_APP_SWITCH]. [BarrierInputEvent.KeyDown.keyId]
+     * is a Barrier key id, not one of those constants, so server key traffic
+     * takes the `else` branch. [action] is ignored: down, repeat, and up would
+     * fire the same global action if a code ever matched. Global actions are
+     * not key-down/key-up pairs.
+     *
+     * There is no public discrete-key injection API on this compileSdk. Do not
+     * add a call to `dispatchKeyEvent`; it is not on [AccessibilityService].
+     *
+     * @return true only when [performGlobalAction] accepts one of the three
+     * mapped codes.
      */
     fun injectKey(keyCode: Int, action: Int): Boolean {
         val globalAction = when (keyCode) {
@@ -96,14 +120,22 @@ class BarrierAccessibilityService : AccessibilityService() {
     fun injectGlobalAction(globalAction: Int): Boolean = performGlobalAction(globalAction)
 
     /**
-     * Injects text into the currently focused editable text field via the
-     * accessibility action [AccessibilityNodeInfo.ACTION_SET_TEXT].
+     * Replaces the text of the focused editable node with [text].
      *
-     * This is the core text-delivery path for the barrier client: the server
-     * pushes text (via clipboard / DCLP data) and the phone types it into the
-     * focused app.
+     * This is not keystroke injection. `ACTION_SET_TEXT` sets the field
+     * contents. It is only useful after a clipboard payload, which is the only
+     * caller. It requires `getRootInActiveWindow()` to return a tree, which
+     * requires `canRetrieveWindowContent` in the service config that this
+     * manifest does not declare.
      *
-     * @return true when the framework accepted and performed the action.
+     * The walk stops at depth [MAX_EDITABLE_NODE_SEARCH_DEPTH] and does not
+     * recycle [AccessibilityNodeInfo] instances. A match must be both
+     * [AccessibilityNodeInfo.isEditable] and [AccessibilityNodeInfo.isFocused].
+     * A focused field deeper than that, or an editable field that is not
+     * focused, is a miss and returns false.
+     *
+     * @return true when [AccessibilityNodeInfo.performAction] reports that the
+     * node accepted `ACTION_SET_TEXT`.
      */
     fun injectText(text: CharSequence): Boolean {
         val root = getRootInActiveWindow() ?: return false
@@ -139,7 +171,16 @@ class BarrierAccessibilityService : AccessibilityService() {
         var instance: BarrierAccessibilityService? = null
             private set
 
-        /** Returns true when this accessibility service is enabled in system settings. */
+        /**
+         * True when secure settings list this component as an enabled
+         * accessibility service.
+         *
+         * False on a normal install, because the manifest does not register
+         * the service config Android needs to offer it to the user. A true
+         * result does not mean [instance] is non-null: the setting can be
+         * stale relative to process death, and this method does not bind
+         * the service.
+         */
         fun isEnabled(context: Context): Boolean {
             val enabledServices = Settings.Secure.getString(
                 context.contentResolver,

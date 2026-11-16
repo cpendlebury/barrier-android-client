@@ -1,11 +1,21 @@
 package com.crrpendlebury.barrierandroid.protocol
 
 /**
- * Wire-level command identifiers for the Barrier protocol.
+ * Wire-level command identifiers for the Barrier control protocol, as this
+ * client spells them.
  *
- * Every packet payload starts with a command string. Most commands are exactly
- * four ASCII characters; the greeting handshake command ("Barrier") is longer
- * and is carried in its entirety, hence it is not encoded on four bytes.
+ * Every payload starts with a command string. Most commands are exactly four
+ * ASCII characters. The greeting command is the seven-byte string "Barrier"
+ * and must not be sliced to four bytes: the first four characters are "Barr",
+ * which is not a command.
+ *
+ * [wireLength] is `value.length`, so greeting writes and reads use 7 and every
+ * other command uses 4. Decode in [BarrierPacket] special-cases the greeting
+ * before it takes the four-byte prefix.
+ *
+ * This enum does not record direction. Both [HELLO] (server hello and the
+ * client's opening hello) and a longer HelloBack share the same command
+ * string; length distinguishes them. See [BarrierPacket.decode].
  */
 enum class BarrierCommand(val value: String) {
     HELLO("Barrier"),

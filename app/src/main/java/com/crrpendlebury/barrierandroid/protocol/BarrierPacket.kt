@@ -1,11 +1,32 @@
 package com.crrpendlebury.barrierandroid.protocol
 
 /**
- * Barrier protocol packet types.
+ * One Barrier payload, without the 4-byte length prefix. [PacketCodec] adds
+ * that prefix.
  *
- * A packet payload is the command string followed by command specific
- * parameters. Integers are encoded big endian and strings are encoded as an
- * unsigned 32-bit big endian byte length followed by the UTF-8 bytes.
+ * Integers are big-endian. The helpers at the bottom of this file are the
+ * only writers and readers; do not add a second endianness.
+ *
+ * Greeting versus everything else: if the payload is at least 7 bytes and
+ * starts with "Barrier", it is a hello. Length 11 is [Hello] (major u16,
+ * minor u16). Any other length is [HelloBack], with a u32 name length at
+ * offset 11 and the name bytes at offset 15. Decode does not check that
+ * those bytes exist. A short buffer throws rather than returning null.
+ * HelloBack encode writes the name as UTF-8. HelloBack decode reads it as
+ * US-ASCII. Non-ASCII client names will not round-trip.
+ *
+ * [ClipboardDataPacket.encode] writes [ClipboardDataPacket.mark] as one byte.
+ * [BarrierClient] copies the 32-bit sequence into that field, so values above
+ * 255 are truncated on the wire. Decode of `DCLP` takes the data slice from
+ * the original payload at offset 14 (4-byte command + 1 + 4 + 1 + 4), not
+ * from the body array. Keep those offsets together if the layout changes.
+ *
+ * `DFTR` and `DDRG` are decoded so the socket reader does not drop the
+ * connection, then ignored by [BarrierClient]. They are not implemented.
+ *
+ * This file has not been validated against a live Barrier 2.4.0 server. When
+ * it disagrees with Barrier's C++ codec, this file is what the unit tests
+ * lock in. Change it only with a failing test that names the upstream layout.
  */
 sealed class BarrierPacket {
     abstract val command: BarrierCommand
@@ -517,6 +538,10 @@ sealed class BarrierPacket {
                     val versionMinor = readInt16(payload, 9)
                     // A bare hello is "Barrier" + versions; a hello-back additionally
                     // carries the client name as a BE32 length prefixed UTF-8 string.
+                    // 11 bytes is "Barrier" + two u16 versions. Anything else is
+                    // treated as HelloBack. There is no check that payload.size
+                    // is at least 15 + nameLength. A hostile or truncated
+                    // hello-back throws from readInt32 or the String constructor.
                     return if (payload.size == 11) {
                         Hello(versionMajor, versionMinor)
                     } else {
@@ -566,6 +591,12 @@ sealed class BarrierPacket {
                     val seq = readInt32(body, 1)
                     val mark = readInt8(body, 5)
                     val dataSize = readInt32(body, 6)
+                    // Offset 14 is the payload, not the body: 4 command bytes
+                    // plus the 10-byte header above. copyOfRange throws if the
+                    // frame is shorter than the claimed size. That is deliberate
+                    // only in the sense that it is unhandled; do not catch it
+                    // here without also teaching the socket reader to drop the
+                    // connection cleanly.
                     ClipboardDataPacket(clipboardId, seq, mark, payload.copyOfRange(14, 14 + dataSize))
                 }
                 BarrierCommand.DSOP.value -> SetOptionsPacket(parseOptions(body))

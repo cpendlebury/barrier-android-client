@@ -8,11 +8,34 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
- * Barrier client protocol state machine.
+ * Client-side Barrier session state machine.
  *
- * Implements the client side of the Barrier control protocol (v1.6):
- * hello / hello-back handshake, screen info exchange, keepalives, input event
- * reception and error handling.
+ * The computer runs the server and owns the keyboard and mouse. This object
+ * receives that input and tells [listener]. It does not inject Android events
+ * itself. Injection lives in the activity and the accessibility service, and
+ * those are not wired to a live client today (see [com.crrpendlebury.barrierandroid.BarrierForegroundService]).
+ *
+ * Handshake this object actually performs:
+ * 1. Send an 11-byte [BarrierPacket.Hello].
+ * 2. On a compatible server hello, send [BarrierPacket.HelloBack] carrying [clientName].
+ * 3. On `QINF`, send `DINF` using [screenWidth] and [screenHeight]. Both default
+ *    to 0. Nothing in the app sets them, so a real server would be told the
+ *    screen is 0 by 0.
+ * 4. Ignore `CIAK`. Enter [BarrierClientState.CONNECTED] only when `DSOP` arrives.
+ *
+ * [scope] owns keepalive, the watchdog, and reconnect. Tests pass
+ * `backgroundScope` so `runTest` can finish. The app passes the foreground
+ * service scope, which is cancelled in `onDestroy`. [listener] is invoked on
+ * [scope], not the main thread.
+ *
+ * [CONNECTING] and [HANDSHAKE] are stored in [currentState] and are not
+ * delivered to [BarrierClientListener.onStateChanged].
+ *
+ * Reconnect runs only after [closeTransport] observed [BarrierClientState.CONNECTED].
+ * [disconnect] sets [userInitiatedClose] and must not schedule another attempt.
+ * The service's listener calls `stopSelf()` on every disconnect, which cancels
+ * [scope] and therefore cancels the reconnect job. Reconnect is unit-tested
+ * and is not a feature of the running app until that listener changes.
  */
 class BarrierClient(
     private val clientName: String,
@@ -21,13 +44,26 @@ class BarrierClient(
     private val listener: BarrierClientListener? = null,
 ) {
 
-    /** Screen size used when replying to server screen info queries. */
+    /**
+     * Width and height, in pixels, written into `DINF`.
+     *
+     * Default 0. The activity never assigns these. A Barrier server uses this
+     * geometry to decide when the pointer has entered the screen, so leaving
+     * the defaults makes the client unusable even after the socket works.
+     * Set both before [connect], from the real display metrics.
+     */
     var screenWidth: Int = 0
     var screenHeight: Int = 0
 
     @Volatile
     private var state: BarrierClientState = BarrierClientState.DISCONNECTED
 
+    /**
+     * Sequence from the latest `CINN`. Barrier uses this to ignore stale
+     * clipboard traffic after a screen switch. This client stores it and
+     * echoes it on [BarrierInputEvent.ScreenLeft], but clipboard handlers do
+     * not compare it to `CCLP` / `DCLP` sequence numbers.
+     */
     @Volatile
     private var currentScreenSeq: Int = 0
 
@@ -64,15 +100,25 @@ class BarrierClient(
     /** Invoked when the server applies options (DSOP). */
     var onOptionsChanged: ((options: List<Pair<Int, Int>>) -> Unit)? = null
 
-    /** Whether clipboard sharing is enabled per server options. */
+    /**
+     * Last `CLPS` value, non-zero meaning enabled. Default true.
+     * Not consulted by [handleClipboardGrab] or [handleClipboardData].
+     */
     var clipboardSharingEnabled: Boolean = true
         private set
 
-    /** Heartbeat interval (seconds) requested by the server, or 0 for default. */
+    /**
+     * Last `HART` value, in seconds, or 0 if the server has not sent one.
+     * The keepalive loop does not read this. It always waits
+     * [KEEP_ALIVE_INTERVAL_MILLIS].
+     */
     var heartbeatSeconds: Int = 0
         private set
 
-    /** Whether screensaver sync is enabled per server options. */
+    /**
+     * Last `SSVR` value, non-zero meaning the server asked for screensaver sync.
+     * [handleScreenSaver] does not read this. It always records the `CSEC` flag.
+     */
     var screenSaverSyncEnabled: Boolean = false
         private set
 
@@ -82,7 +128,17 @@ class BarrierClient(
     val currentState: BarrierClientState
         get() = state
 
-    /** Opens a connection to the Barrier server and runs the handshake. */
+    /**
+     * Records the endpoint and starts the handshake by sending hello.
+     *
+     * Does not notify [listener] of [BarrierClientState.CONNECTING] or
+     * [BarrierClientState.HANDSHAKE]. Returns when hello has been written,
+     * not when the server has answered. Further packets arrive through
+     * [BarrierTransport.onPacket], which this method installs.
+     *
+     * [useTls] is stored and passed to [BarrierTransport.connect]. The socket
+     * implementation currently ignores the argument. See [SocketBarrierTransport].
+     */
     suspend fun connect(serverHost: String, serverPort: Int, useTls: Boolean) {
         currentServerHost = serverHost
         currentServerPort = serverPort
@@ -90,7 +146,15 @@ class BarrierClient(
         performConnect(serverHost, serverPort, useTls)
     }
 
-    /** Closes the connection and stops keepalives. Does not schedule a reconnect. */
+    /**
+     * User-requested close. Sets [userInitiatedClose] before cancelling work
+     * so a reconnect loop already inside [scheduleReconnect] exits instead of
+     * calling [performConnect] again.
+     *
+     * Notifies [BarrierClientState.DISCONNECTED]. The foreground service treats
+     * that callback as "stop the service", so this also ends the process's
+     * copy of the client when the listener wrapper is installed.
+     */
     fun disconnect() {
         userInitiatedClose = true
         reconnectJob?.cancel()
@@ -219,6 +283,13 @@ class BarrierClient(
         startKeepAlive()
     }
 
+    /**
+     * Records [options] and copies the three ids this client names into fields.
+     *
+     * Unknown ids stay in [appliedOptions] only. [OPTION_RELATIVE_MOUSE_MOVES]
+     * is a named constant and is still unknown to this `when`. None of the
+     * stored flags change later packet handling. See the property KDocs.
+     */
     private fun applyOptions(options: List<Pair<Int, Int>>) {
         appliedOptions = options
         for ((id, value) in options) {
@@ -244,6 +315,11 @@ class BarrierClient(
                 if (state != BarrierClientState.CONNECTED) {
                     break
                 }
+                // This timestamp is also updated by every inbound packet and by
+                // handleKeepAlive. The watchdog therefore does not measure
+                // "server keepalives missed"; our own sends reset it. Do not
+                // describe this as a three-missed-server-keepalive detector
+                // until the send path stops touching lastServerActivityNanos.
                 lastServerActivityNanos = System.nanoTime()
                 transport.send(BarrierPacket.KeepAlivePacket())
             }
@@ -365,8 +441,12 @@ class BarrierClient(
     }
 
     private suspend fun handleClipboardGrab(packet: BarrierPacket.ClipboardGrabPacket) {
-        // The server asked for the clipboard we hold; read it via the registered
-        // provider and reply with the clipboard data (DCLP).
+        // Server asked for the clipboard we hold. clipboardSharingEnabled is
+        // not checked. A null provider is answered with an empty DCLP, not
+        // silence, so the server does not wait forever.
+        //
+        // mark is encoded as one byte. Copying seq into mark truncates any
+        // sequence above 255. See BarrierPacket.ClipboardDataPacket.encode.
         val data = onClipboardGrab?.invoke(packet.clipboardId, packet.seq) ?: ByteArray(0)
         transport.send(
             BarrierPacket.ClipboardDataPacket(
@@ -429,6 +509,12 @@ class BarrierClient(
         transport.send(packet)
     }
 
+    /**
+     * Writes `CNOP`. This client sends one after screen enter, screen leave,
+     * and every key, pointer, wheel, and button packet. That is local policy,
+     * not something [BarrierPacket] requires. Do not remove it without checking
+     * whether a server treats a missing ack as a stall.
+     */
     private suspend fun sendNoOp() {
         transport.send(BarrierPacket.NoOpPacket())
     }
@@ -451,14 +537,33 @@ class BarrierClient(
         transport.close()
         state = BarrierClientState.DISCONNECTED
         notifyStateChanged(BarrierClientState.DISCONNECTED)
-        // Server-initiated close while connected: schedule a reconnect with
-        // exponential backoff. User-initiated disconnects bypass this path.
+        // Only a drop from CONNECTED reconnects. A failed hello, or close
+        // during HANDSHAKE, does not. disconnect() never calls this method;
+        // it closes the transport itself and sets userInitiatedClose.
+        //
+        // The listener is notified DISCONNECTED before the job is launched.
+        // BarrierForegroundService stops itself on that callback and cancels
+        // the scope this job needs. Unit tests do not install that listener
+        // wrapper, which is why they can observe the reconnect.
         if (wasConnected) {
             scheduleReconnect()
         }
     }
 
-    /** Schedules a reconnect attempt with exponential backoff after a drop. */
+    /**
+     * Reconnect loop. Waits [backoffMillis], then doubles it up to
+     * [MAX_RECONNECT_BACKOFF_MILLIS], then calls [performConnect].
+     *
+     * The delay is real time in production and virtual time under `runTest`.
+     * Tests must `advanceTimeBy` at least [INITIAL_RECONNECT_BACKOFF_MILLIS];
+     * `advanceUntilIdle` alone does not release this delay on the test
+     * scheduler used here.
+     *
+     * A successful [performConnect] only means hello was written. The job then
+     * exits. The next drop has to call [scheduleReconnect] again. A thrown
+     * connect stays in the loop. [userInitiatedClose] is checked after the
+     * delay, so a disconnect during the wait still burns one delay.
+     */
     private fun scheduleReconnect() {
         if (reconnectJob?.isActive == true) {
             return

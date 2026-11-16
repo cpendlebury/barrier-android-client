@@ -10,7 +10,33 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** TCP transport implementing [BarrierTransport] over a plain or TLS socket. */
+/**
+ * Socket transport. Not a working Barrier connection.
+ *
+ * Known defects, left in place and commented so they are not "cleaned up"
+ * into a different bug:
+ *
+ * - [createSocket] never constructs a plain [java.net.Socket]. Both branches
+ *   use [javax.net.ssl.SSLSocketFactory]. The comment inside the catch block
+ *   that says "fall back to plaintext" is wrong; the fallback is still an
+ *   SSL socket from the default [javax.net.ssl.SSLContext].
+ * - The reflected method `SSLSocketFactory.createSSLSocket(String, int)` is
+ *   not a platform API. The reflection fails, so the try branch never
+ *   succeeds on a normal Android runtime. Barrier's own TLS (fingerprint
+ *   pinning of a self-signed certificate) is not implemented either.
+ * - [javax.net.ssl.SSLSocketFactory.createSocket] with a host and port already
+ *   connects. [connect] then calls [java.net.Socket.connect] again on that
+ *   socket.
+ * - [connect]'s `useTls` parameter is ignored. [createSocket] reads the
+ *   constructor property of the same name. Callers that pass a different
+ *   value, including [BarrierClient.performConnect], do not change the socket.
+ * - The read loop returns on unknown packets and on I/O errors without
+ *   closing the socket and without notifying [BarrierClient]. The client
+ *   watchdog may eventually drop the session; it is not told immediately.
+ * - [connect] returns immediately if [state] is not [TransportState.DISCONNECTED].
+ *   A second connect on a live transport is a silent no-op, which will stall
+ *   a reconnect that forgot to [close] first. [close] does reset the state.
+ */
 class SocketBarrierTransport(
     private val host: String,
     private val port: Int,
@@ -31,6 +57,9 @@ class SocketBarrierTransport(
         if (state != TransportState.DISCONNECTED) {
             return
         }
+        // `useTls` is intentionally unread. createSocket() uses the constructor
+        // flag. See the class KDoc before "fixing" this by threading the
+        // parameter through without also replacing the SSL factory hack.
         val newSocket = createSocket()
         newSocket.connect(InetSocketAddress(host, port))
         socket = newSocket
@@ -57,8 +86,11 @@ class SocketBarrierTransport(
     }
 
     /**
-     * Creates a TLS socket when requested, falling back to a plaintext socket
-     * when TLS negotiation fails (plaintext fallback).
+     * Builds the socket [connect] will use.
+     *
+     * Does not honour a plaintext request. See the class KDoc. The catch block
+     * is the path that actually runs, because `createSSLSocket` is not on
+     * [SSLSocketFactory].
      */
     private fun createSocket(): Socket {
         val factory = SSLContext.getDefault().socketFactory

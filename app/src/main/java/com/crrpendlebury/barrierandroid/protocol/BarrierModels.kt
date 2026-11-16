@@ -1,6 +1,21 @@
 package com.crrpendlebury.barrierandroid.protocol
 
-/** Lifecycle states of the Barrier client connection. */
+/**
+ * States and events the protocol layer shows to the Android UI.
+ *
+ * Nothing in this file talks to Android. The activity maps these types onto
+ * text. Direction of control remains: the computer's Barrier server owns the
+ * keyboard and mouse and pushes events here; this process does not send key
+ * or pointer events upstream.
+ */
+
+/**
+ * Lifecycle of one [BarrierClient] session.
+ *
+ * [CONNECTING] and [HANDSHAKE] are written by the client but are not passed to
+ * [BarrierClientListener.onStateChanged]. The listener hears [CONNECTED] and
+ * [DISCONNECTED] only. Do not write UI that waits for a handshake callback.
+ */
 enum class BarrierClientState {
     DISCONNECTED,
     CONNECTING,
@@ -8,7 +23,15 @@ enum class BarrierClientState {
     CONNECTED,
 }
 
-/** Errors surfaced by the Barrier protocol layer. */
+/**
+ * Failures the client chooses to surface.
+ *
+ * Socket connect failures, read errors, and unknown packets are not values of
+ * this type. [SocketBarrierTransport] swallows read errors, and a thrown
+ * [BarrierTransport.connect] is not caught by the foreground service. Only
+ * an incompatible hello and the server rejection packets (`EBSY`, `EUNK`,
+ * `EBAD`) become a [BarrierError].
+ */
 sealed class BarrierError {
     data class IncompatibleVersion(
         val serverMajorVersion: Int,
@@ -26,7 +49,21 @@ sealed class BarrierError {
     }
 }
 
-/** Input events delivered from the Barrier server to the local device. */
+/**
+ * Input the server asked this client to apply locally.
+ *
+ * Field names match the packet fields, not Android [android.view.KeyEvent]
+ * or [android.view.MotionEvent] constants. In particular [KeyDown.keyId] is a
+ * Barrier key id. Comparing it to `KeyEvent.KEYCODE_*` will not match real
+ * server traffic. [KeyDown.button] is a separate protocol field; this client
+ * does not interpret it.
+ *
+ * The activity currently ignores [ScreenEntered] and [ScreenLeft]. Pointer
+ * and key subclasses are forwarded to the accessibility service only if that
+ * service's [com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService.instance]
+ * is non-null, which requires the user to have enabled a service this manifest
+ * does not fully register.
+ */
 sealed class BarrierInputEvent {
     data class KeyDown(
         val keyId: Int,
@@ -82,7 +119,19 @@ sealed class BarrierInputEvent {
     ) : BarrierInputEvent()
 }
 
-/** Consumer for Barrier client connection and input events. */
+/**
+ * Callbacks from [BarrierClient] into the host.
+ *
+ * Invoked on the client's [kotlinx.coroutines.CoroutineScope], which in the
+ * app is `Dispatchers.IO`. Implementations must hop to the main thread before
+ * touching views. [onStateChanged] is not called for [BarrierClientState.CONNECTING]
+ * or [BarrierClientState.HANDSHAKE].
+ *
+ * The foreground service wraps the activity listener and, on
+ * [BarrierClientState.DISCONNECTED], calls `stopSelf()`. That cancels the
+ * scope the client uses for reconnect. A listener that treats every
+ * disconnect as fatal will defeat [BarrierClient]'s backoff loop.
+ */
 interface BarrierClientListener {
     fun onStateChanged(state: BarrierClientState)
 

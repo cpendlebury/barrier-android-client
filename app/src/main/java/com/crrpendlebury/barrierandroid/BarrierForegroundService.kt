@@ -25,11 +25,34 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Android 8+ foreground service hosting the [BarrierClient] connection.
+ * Foreground service that is supposed to own the [BarrierClient].
  *
- * The client (and its keepalive loop) lives in the service scope so the
- * connection survives while the app is not in the foreground, and the service
- * holds the foreground start notification required on Android 8+.
+ * Direction of control is unchanged: this process is the Barrier client, not
+ * a keyboard for the computer. The service exists so a future working session
+ * can outlive the activity. It does not do that today.
+ *
+ * Wiring defect: [MainActivity] assigns [Companion.pendingConnection].
+ * [onStartCommand] reads the instance property [pendingConnection], which
+ * nothing ever sets. The names match. The receivers do not. [startConnection]
+ * is therefore dead, and [connectionListener] is never assigned, so even a
+ * one-line fix that reads the companion must also copy
+ * [PendingConnection.listener] onto [connectionListener] or input events are
+ * still dropped. Clipboard lambdas are copied only inside [startConnection].
+ *
+ * [clientListener] calls `stopSelf()` on every [BarrierClientState.DISCONNECTED].
+ * [BarrierClient.closeTransport] notifies that state before it schedules
+ * reconnect. Stopping the service cancels [serviceScope] and cancels the
+ * reconnect job. Do not "fix" reconnect inside the client without changing
+ * this listener, and do not treat disconnect as always fatal if reconnect is
+ * meant to run.
+ *
+ * [onStartCommand] always calls [startForeground] with a type argument and
+ * always creates a [android.app.NotificationChannel]. Those require API 29
+ * and API 26. minSdk is 22. There is no `SDK_INT` guard. The manifest type
+ * is `specialUse` without `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`, which Android 14
+ * can reject.
+ *
+ * The notification text is fixed. It does not reflect connection state.
  */
 class BarrierForegroundService : Service() {
 
@@ -69,6 +92,9 @@ class BarrierForegroundService : Service() {
     override fun onCreate() = super.onCreate()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Instance field, not Companion.pendingConnection. See the class KDoc.
+        // Do not delete this read as "unused" without switching it to the
+        // companion property the activity actually writes.
         val pending = pendingConnection
         pendingConnection = null
         if (pending != null) {
@@ -139,8 +165,13 @@ class BarrierForegroundService : Service() {
     }
 
     /**
-     * Connection request handed from the hosting activity to the foreground
-     * service; consumed by the next [onStartCommand].
+     * Connection request the activity builds.
+     *
+     * [listener] is the activity's [BarrierClientListener]. [startConnection]
+     * does not pass it to [BarrierClient]; it passes [clientListener] and
+     * expects [connectionListener] to have been set to this listener. Nothing
+     * sets [connectionListener]. A fix has to do both: read this object from
+     * the companion, and assign [connectionListener] from [listener].
      */
     data class PendingConnection(
         val host: String,
@@ -155,6 +186,15 @@ class BarrierForegroundService : Service() {
         const val FOREGROUND_NOTIFICATION_ID = 1
         const val CHANNEL_ID = "barrier_foreground_service"
 
+        /**
+         * Set by [MainActivity] immediately before [startService].
+         *
+         * Not read by [onStartCommand]. That method has an instance property
+         * of the same name. This is the live hand-off slot; the instance
+         * property is the one the service looks at. Both must be reconciled
+         * before a session can start. `@Volatile` matters only after something
+         * reads this field from another thread.
+         */
         @Volatile
         var pendingConnection: PendingConnection? = null
     }

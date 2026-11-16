@@ -1,5 +1,37 @@
 package com.crrpendlebury.barrierandroid
 
+/**
+ * Connection form for the Barrier Android client.
+ *
+ * The computer runs the Barrier server and owns the keyboard and mouse. This
+ * activity is the phone-side client UI. It does not turn the phone into an
+ * input device for the computer, and it does not show the computer's screen.
+ *
+ * What Connect does today: if the accessibility service is not listed as
+ * enabled, it shows a toast and an error line, then continues. It writes a
+ * [BarrierForegroundService.PendingConnection] onto the service companion and
+ * calls [startService]. The service does not read that companion property, so
+ * no socket is opened and [barrierClientListener] is never attached to a
+ * [com.crrpendlebury.barrierandroid.protocol.BarrierClient]. Status stays
+ * `DISCONNECTED` because connecting and handshake are not listener events
+ * anyway.
+ *
+ * Disconnect, and [onDestroy], stop the service. There is no "keep alive in
+ * the background" switch distinct from the activity lifetime.
+ *
+ * [handleClipboardData] and [readClipboardBytes] run only if a client invokes
+ * them. Connect does not create that client. If they are called,
+ * [handleClipboardData] replaces the device clipboard and then tries
+ * [com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService.injectText],
+ * which replaces a focused field rather than typing. Injection failure text
+ * distinguishes "service not enabled" from "no focused editable field". The
+ * second message is also what you get when the service object exists but the
+ * node walk misses.
+ *
+ * Views are the XML layout `activity_main`. Compose is on the classpath and
+ * unused here.
+ */
+
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
@@ -134,6 +166,15 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Stores a [BarrierForegroundService.PendingConnection] on the service
+     * companion and starts the service. Does not construct a client. The
+     * service reads a different property; see that class's KDoc.
+     *
+     * An empty host is not rejected. A non-numeric port becomes
+     * [com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT].
+     * [startService] failures are swallowed by [runCatching].
+     */
     private fun connectToBarrierServer() {
         val host = serverHostEditText.text.toString().trim()
         val port = serverPortEditText.text.toString().toIntOrNull() ?: DEFAULT_BARRIER_PORT

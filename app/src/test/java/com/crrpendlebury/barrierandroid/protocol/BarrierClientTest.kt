@@ -10,6 +10,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * [BarrierClient] against [FakeBarrierTransport]. No sockets, no Android
+ * service, no accessibility service.
+ *
+ * The client is constructed with `backgroundScope` so keepalive and reconnect
+ * jobs are not children of the `runTest` body. After `launch { connect }` or
+ * [FakeBarrierTransport.emit], call `runCurrent()` before asserting. Plain
+ * `advanceUntilIdle()` does not dispatch those jobs on coroutines-test 1.7.3
+ * by itself.
+ *
+ * The reconnect test must also `advanceTimeBy(INITIAL_RECONNECT_BACKOFF_MILLIS)`.
+ * `advanceUntilIdle` does not fire that delay. The test does not install the
+ * foreground-service listener, so it does not cover `stopSelf()` cancelling
+ * the reconnect scope.
+ */
 class BarrierClientTest {
 
     private val testScope = TestScope()

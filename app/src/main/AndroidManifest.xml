@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Barrier Android client. The computer runs the Barrier server. This app is
+  the phone-side client. It does not share the phone's keyboard upstream.
+
+  Accessibility service: the intent-filter and bind permission are not enough.
+  Android also requires a meta-data element named android.accessibilityservice
+  pointing at an XML resource with canRetrieveWindowContent and the other
+  flags. That resource does not exist. The service will not appear in
+  Settings until it is added. Do not document the current entry as user-enableable.
+
+  Foreground service: type specialUse without a PROPERTY_SPECIAL_USE_FGS_SUBTYPE
+  property. Android 14+ can reject the start. The service also calls APIs
+  newer than minSdk 22. See BarrierForegroundService.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />

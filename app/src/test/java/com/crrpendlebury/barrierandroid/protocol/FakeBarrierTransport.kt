@@ -4,7 +4,20 @@ import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
-/** In-memory [BarrierTransport] fake for unit testing. */
+/**
+ * In-memory [BarrierTransport] for unit tests.
+ *
+ * [connect] does not look at host, port, or TLS. [send] appends to
+ * [sentPackets]. [emit] invokes [onPacket] on the calling thread, which is
+ * the test thread; [BarrierClient] then hops onto its scope. Tests must
+ * `runCurrent` after [emit] or the handler has not run.
+ *
+ * [sentPackets] is not a concurrent queue. [send] synchronizes on [mutex],
+ * which is a coroutines [kotlinx.coroutines.sync.Mutex] used only as a
+ * monitor object. Do not `mutex.withLock` and `synchronized(mutex)` on the
+ * same instance from new code; pick one. The unused imports above this class
+ * are leftover and not part of the fake's behaviour.
+ */
 class FakeBarrierTransport : BarrierTransport {
 
     override var state: TransportState = TransportState.DISCONNECTED
