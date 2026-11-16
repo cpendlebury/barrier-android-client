@@ -1,56 +1,43 @@
 # Troubleshooting
 
-## "Accessibility service: disabled"
+## Connect does nothing useful
 
-The accessibility service is not enabled. Input injection will not work.
+Expected with this tree. **Connect** starts a foreground service and does not open a socket. The status line stays `Barrier state: DISCONNECTED`. The notification, if the process gets that far, stays on "Waiting for Barrier server".
 
-**Fix**: Tap **Open Accessibility Settings** in the app, find **BarrierAndroid**, toggle it **On**, and accept the permission dialog. The status updates on return to the app (checked on resume).
+Cause: `MainActivity` sets `BarrierForegroundService.pendingConnection` on the companion object. `onStartCommand` reads an instance field of the same name, which is always null. The activity's listener is never assigned to `connectionListener` either, so input would still be dropped after that read is fixed.
 
-## "Text injection failed (no focused editable field)"
+This is not a firewall, hostname, or server-config problem.
 
-`ACTION_SET_TEXT` requires a focused, editable text field in the active window. If no such field is focused, injection fails.
+## The accessibility service is not in Settings
 
-**Fix**: Tap into a text field (e.g., a search bar or message input) on the phone before triggering text delivery from the server.
+Expected. The manifest service has the bind permission and the intent action, and no `android.accessibilityservice` meta-data resource. Android does not list a service that lacks that XML. The button in the app only opens the system screen.
 
-## "Accessibility service not enabled; text not injected."
+`Accessibility service: disabled` is the correct reading of secure settings for this build.
 
-Same as above — the service is disabled. Enable it via Settings → Accessibility.
+## The app crashes when Connect is tapped
 
-## Connection fails / "ConnectionFailed"
+On Android 5.1–9, `BarrierForegroundService` calls `NotificationChannel` and the three-argument `startForeground` with no `SDK_INT` check. Those require API 26 and API 29. `minSdk` 22 does not mean those versions work.
 
-- Verify the server host and port are correct.
-- Ensure the server is running and reachable (firewall, same network).
-- Check that the client name matches a configured screen on the server.
-- Check logs: `adb logcat -s BarrierAndroid`.
+On Android 14 and later, a `specialUse` foreground service without `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` can be rejected. There is no such property in the manifest.
 
-## "incompatible server version"
+## "incompatible server version" / "server is busy" / "unknown client"
 
-The server speaks a protocol version older than 1.6. Upgrade the Barrier server to v2.4.0+.
+Those strings exist for `EICV`, `EBSY`, `EUNK`, and `EBAD` if a client is running and the listener is attached. The current app never gets there. If you see them, you are not running this wiring.
 
-## "server is busy" / "server does not know this client" / "protocol error reported by server"
+A TCP failure, TLS failure, or timeout will not show those messages. The transport does not map socket errors onto `BarrierError`.
 
-- **Busy**: another client is connecting; retry.
-- **Unknown client**: the client name does not match any configured screen. Fix the name on the server.
-- **Protocol error**: version or framing mismatch; ensure both sides are v2.4.0.
+## Text injection failed / no focused field
 
-## Reconnect loop
+Those strings are only set from `handleClipboardData`, which only runs from `onClipboardData`. Connect does not register that callback on a live client, so this error means some other caller invoked the handler. It does not mean typing from the server works.
 
-After a server drop, the client reconnects with exponential backoff (1s → 30s). If the server is down, this continues indefinitely. Tap **Disconnect** to stop.
+## Build fails offline
 
-## Foreground service notification
+`--offline` is for a machine that already cached the dependencies. A fresh clone needs network. Remove `--offline` and retry.
 
-A persistent "Barrier" notification is shown while connected. This is required on Android 8+ for background operation. It is removed on disconnect.
+## The Gradle project is called FoodDiary
 
-## Build issues
+`settings.gradle.kts` still has `rootProject.name = "FoodDiary"`. The app you install is still `com.crrpendlebury.barrierandroid` / launcher name BarrierAndroid. The Gradle name is a template leftover, not a second app.
 
-### `androidx.appcompat` not cached
+## Tests pass but the phone does nothing
 
-The app does not depend on `appcompat`. If you add it, ensure it's cached or build online.
-
-### TLS reflection warning
-
-`SSLSocketFactory.createSSLSocket` is missing in `android-35`; the app uses reflection and falls back to plaintext. This is expected and handled.
-
-### Gradle offline
-
-Always use `--offline`. Dependencies are cached locally. If a dependency is missing, build online once to populate the cache.
+That is consistent. The 27 unit tests drive `BarrierClient` through `FakeBarrierTransport`. They never start `BarrierForegroundService`, never open a socket, and never enable an accessibility service.

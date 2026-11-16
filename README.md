@@ -1,51 +1,50 @@
-# BarrierAndroid
+# barrier-android-client
 
-**Android phone as an external keyboard/mouse for a computer running the [Barrier](https://github.com/debauchee/barrier) server.**
+Experimental Android **client** for a [Barrier](https://github.com/debauchee/barrier) server.
 
-BarrierAndroid is a native Android client for the Barrier KVM protocol. It receives keyboard, mouse, and clipboard events from a Barrier server and injects them into the Android device via an Accessibility Service. No video is displayed — the phone acts purely as an input target.
+The intended setup is the normal Barrier one, with the phone as a secondary screen:
 
-## Features
+- The computer runs the Barrier **server** and owns the real keyboard and mouse.
+- The phone runs this **client**.
+- The server sends input to the phone. The phone is supposed to act on that input.
+- The phone does not display the computer's screen. Video is out of scope.
+- Clipboard sharing is in scope.
 
-- **Pointer injection** — absolute/relative mouse motion, button down/up, scroll wheel via `AccessibilityService.dispatchGesture`
-- **Text injection** — typed text delivered into the focused editable field via `AccessibilityNodeInfo.ACTION_SET_TEXT`
-- **Navigation keys** — Back, Home, Recents via framework global actions
-- **Clipboard sync** — server-to-client clipboard data stored into the device clipboard and injected into the focused field; client-to-server clipboard provided on server grab
-- **Foreground service** — keeps the connection and injection alive while the app is backgrounded (Android 8+ compliant)
-- **Reconnect with backoff** — exponential backoff (1s → 30s) on server-initiated disconnect
-- **Screensaver/options handling** — reacts to server screensaver state and option updates (clipboard sharing, heartbeat rate, etc.)
-- **TLS support** — TLS expected with plaintext fallback
+This repository does **not** turn the phone into a keyboard or mouse for the computer. Control is meant to flow the other way: computer keyboard and mouse, into the phone.
 
-## Requirements
+It is also **not a working client yet**. The protocol code is unit-tested. The Android app does not open a Barrier session, and it cannot inject input from a live connection. See [Status and limitations](docs/limitations.md) before trying to use it.
 
-- Android 5.0+ (minSdk 22)
-- A Barrier server (v2.4.0, protocol v1.6) reachable on the network
-- The accessibility service must be enabled by the user (Settings → Accessibility)
+Launcher name: **BarrierAndroid**. Application id: `com.crrpendlebury.barrierandroid`. There are no published releases and no license file in this repository.
 
-## Quick start
+## What is actually implemented
 
-1. Build the APK (see [Installation](docs/installation.md)) or download a release.
-2. Install on the Android device.
-3. Open **Settings → Accessibility → BarrierAndroid** and enable the service.
-4. Launch BarrierAndroid, enter the server host/port, tap **Connect**.
-5. On the Barrier server, add this device as a client screen.
-
-See [Usage](docs/usage.md) for the full walkthrough.
+| Area | State |
+|------|--------|
+| Packet codec and client state machine | Implemented and covered by unit tests against an in-memory transport |
+| TCP session from the app | Not started. Connect stores a request the service never reads |
+| Barrier TLS, or a plaintext fallback | Not implemented. The socket helper does not open a plain `Socket`, and it does not speak Barrier's TLS handshake |
+| Pointer, key, and text injection | Methods exist on the accessibility service. Nothing in a live session calls them, and the service is not registered so Android will show it in Accessibility settings |
+| Clipboard, screensaver, options, reconnect | Handled inside `BarrierClient` and unit-tested. Not reachable from the app, and several of those values are stored without changing behaviour |
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Installation](docs/installation.md) | Build from source, install APK, prerequisites |
-| [Usage](docs/usage.md) | Connecting, enabling accessibility, injecting input |
-| [Configuration](docs/configuration.md) | Server setup, options, clipboard, TLS |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
-| [Architecture](docs/architecture.md) | Codebase structure, components, data flow |
-| [Protocol Reference](docs/protocol-reference.md) | Barrier protocol v1.6 details |
+| Document | What it covers |
+|----------|----------------|
+| [Status and limitations](docs/limitations.md) | What works, what does not, and why |
+| [Installation](docs/installation.md) | Build the debug APK and run the unit tests |
+| [Using the app](docs/usage.md) | What the current screen does when you tap Connect |
+| [Configuration](docs/configuration.md) | Defaults, and which server options the code actually applies |
+| [Troubleshooting](docs/troubleshooting.md) | Why a session does not come up |
+| [Architecture](docs/architecture.md) | How the pieces fit together, including the broken wiring |
+| [Protocol notes](docs/protocol-reference.md) | What this client's codec implements. Not a Barrier specification |
 
-## Status
+## Building
 
-Phase 1 (protocol core) and Phase 2 (injection + clipboard + foreground service) are complete. Phase 3 (hardening) is in progress: reconnect/backoff, screensaver/options handling, and UI wiring are done; arbitrary-keycode injection remains an open limitation (no public API in compileSdk 35).
+Requirements and commands are in [Installation](docs/installation.md). Short version, from a checkout with network access:
 
-## License
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+```
 
-See [LICENSE](LICENSE) (if present). BarrierAndroid is an independent client implementation of the Barrier protocol.
+The debug APK is `app/build/outputs/apk/debug/app-debug.apk`. Installing it will not give you a working Barrier screen.

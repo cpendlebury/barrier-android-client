@@ -1,112 +1,87 @@
-# Protocol Reference
+# Protocol notes
 
-BarrierAndroid implements the **Barrier protocol v1.6** (Barrier server v2.4.0).
+This describes the framing **this client implements** in `BarrierPacket` and `PacketCodec`. It is not a copy of the Barrier specification, and it has not been checked against a live Barrier 2.4.0 server. Where the code and a typical Barrier description disagree, the code is what is documented here.
+
+Wire constants live in `BarrierCommand` and `BarrierConstants`. Protocol version advertised by the client is 1.6 (`PROTOCOL_MAJOR_VERSION` / `PROTOCOL_MINOR_VERSION`).
 
 ## Framing
 
-Every message is a 4-byte big-endian length prefix followed by the payload:
+`PacketCodec` prefixes every payload with a 4-byte big-endian length. The reader drops the connection if the length is greater than 4 MiB, if the stream ends early, or if `BarrierPacket.decode` returns null.
 
-```
-┌──────────────┬─────────────────────┐
-│ u32 BE len   │ payload (len bytes) │
-└──────────────┴─────────────────────┘
-```
+Integers in payloads are big-endian. The helpers treat them as unsigned bit patterns (`readInt16` / `readInt32`). Strings, where present, are a big-endian 32-bit byte length plus bytes. HelloBack uses US-ASCII for the name on decode and UTF-8 on encode.
 
-- Maximum message length: 4 MiB.
-- Payload starts with a 4-character command (except the greeting, which is 7 chars: `"Barrier"`).
+## Greeting
 
-## Greeting (handshake)
+The greeting command is the 7-byte ASCII string `Barrier`, not a 4-byte command.
 
-Server → client:
-```
-"Barrier" (7 bytes) + u16 major + u16 minor
-```
-- If payload size == 11: `Hello(major, minor)` (server hello).
-- If payload size > 11: `HelloBack(major, minor, name)` (server hello-back, includes client name).
+| Payload length after the 7-byte command | Decoded as | Direction this client uses |
+|------------------------------------------|------------|----------------------------|
+| Exactly 4 more bytes (11 total): major u16, minor u16 | `Hello` | Server → client. Client sends this first as well, via `BarrierPacket.Hello.encode` |
+| Longer: major u16, minor u16, name length u32 at offset 11, name at offset 15 | `HelloBack` | Client → server, in reply to a compatible `Hello` |
 
-Client → server (reply to server hello):
-```
-"Barrier" (7) + u16 major + u16 minor + u32 nameLen + UTF-8 name
-```
+Decode does not check that the buffer is long enough for the name. A short hello-back will throw rather than return null.
 
-## Handshake sequence
+The client accepts a server hello only when major is 1 and minor is at least 6. Otherwise it reports `IncompatibleVersion` and closes. It does not send `EICV`.
 
-1. Server sends `Hello(maj, min)`.
-2. Client validates version (major == 1, minor >= 6). If incompatible → `EICV` + close.
-3. Client sends `HelloBack(maj, min, clientName)`.
-4. Server sends `QINF` (query info).
-5. Client sends `DINF` (screen info: xOrigin, yOrigin, width, height, warpZone, mouseX, mouseY).
-6. Server sends `CIAK` (info acknowledged).
-7. Server sends `DSOP` (set options) → handshake complete, client enters `CONNECTED`.
+## Commands the codec knows
 
-## Screen events
+Unknown 4-byte commands return null, and the socket reader then stops. These commands are decoded:
 
-- `CINN` (screen enter): `x, y, seq, modifierMask` — server delivers input to this client.
-- `COUT` (screen leave): client acknowledges with `CNOP`.
+| Command | Class | Body, as this codec reads it |
+|---------|--------|------------------------------|
+| `QINF` | `QueryInfoPacket` | empty |
+| `CIAK` | `InfoAcknowledgedPacket` | empty |
+| `CNOP` | `NoOpPacket` | empty |
+| `CBYE` | `ClosePacket` | empty |
+| `CSEC` | `ScreenSaverPacket` | u8, non-zero means started |
+| `CROP` | `ResetOptionsPacket` | empty |
+| `CALV` | `KeepAlivePacket` | empty |
+| `CCLP` | `ClipboardGrabPacket` | u8 id, u32 seq |
+| `EICV` | `IncompatibleVersionPacket` | u16 major, u16 minor |
+| `EBSY` | `BusyPacket` | empty |
+| `EUNK` | `UnknownPacket` | empty |
+| `EBAD` | `BadPacket` | empty |
+| `CINN` | `ScreenEnterPacket` | u16 x, u16 y, u32 seq, u16 modifier mask |
+| `COUT` | `ScreenLeftPacket` | empty. Server → client. This client does not send it |
+| `DKDN` | `KeyDownPacket` | u16 key id, u16 modifier mask, u16 button |
+| `DKRP` | `KeyRepeatPacket` | u16 key id, u16 modifier mask, u16 repeat, u16 button |
+| `DKUP` | `KeyUpPacket` | u16 key id, u16 modifier mask, u16 button |
+| `DMMV` | `MouseMovePacket` | u16 x, u16 y |
+| `DMRM` | `MouseRelativeMovePacket` | u16 dx, u16 dy |
+| `DMWM` | `MouseWheelPacket` | u16 x delta, u16 y delta |
+| `DMDN` | `MouseButtonDownPacket` | u8 button |
+| `DMUP` | `MouseButtonUpPacket` | u8 button |
+| `DINF` | `ScreenInfoPacket` | seven u16 fields: x origin, y origin, width, height, warp zone, mouse x, mouse y |
+| `DCLP` | `ClipboardDataPacket` | u8 id, u32 seq, u8 mark, u32 size, then that many bytes taken from the payload at offset 14 |
+| `DSOP` | `SetOptionsPacket` | repeating u32 id, u32 value, while 8 bytes remain |
+| `DFTR` | `FileTransferPacket` | u8 mark, u32 size, bytes from payload offset 9. Decoded and ignored |
+| `DDRG` | `DragInfoPacket` | u16 count, u32 size, bytes from payload offset 10. Decoded and ignored |
 
-## Input events (server → client)
+`DINF` encode writes 14 bytes of parameters (7 × u16) after the command. The app never sets width and height, so those fields are 0.
 
-| Command | Packet | Fields |
-|---------|--------|--------|
-| `DKDN` | KeyDown | keyId (u16), modifierMask (u16), button (u16) |
-| `DKRP` | KeyRepeat | keyId, modifierMask, repeat (u16), button (u16) |
-| `DKUP` | KeyUp | keyId, modifierMask, button (u16) |
-| `DMMV` | MouseMove | x (u16), y (u16) |
-| `DMRM` | MouseRelativeMove | dx (u16), dy (u16) |
-| `DMWM` | MouseWheel | xDelta (u16), yDelta (u16) |
-| `DMDN` | MouseButtonDown | button (u8) |
-| `DMUP` | MouseButtonUp | button (u8) |
+## What the client sends
 
-Client acknowledges each input event with `CNOP`.
+| When | Packet |
+|------|--------|
+| Start of `performConnect` | `Hello` (versions only, 11-byte payload) |
+| Compatible server `Hello` | `HelloBack` (versions, then UTF-8 name) |
+| `QINF` | `DINF` with origins 0, configured size, warp 0, mouse 0,0 |
+| `CALV`, and the keepalive timer | `CALV` |
+| `CCLP` | `DCLP` using the grab id and seq, mark set to that same seq, data from `onClipboardGrab` or empty |
+| `CINN`, `COUT`, and every key, pointer, wheel, and button packet | `CNOP` |
 
-## Keepalive
+Sending `CNOP` after each input event is this client's behaviour. Do not assume a Barrier server requires it.
 
-- `CALV` (keepalive): no params. Client replies with `CALV`.
-- Interval: 3s. Watchdog drops connection after 3 missed (9s).
+`DCLP` encode writes `mark` as one byte. The grab reply sets mark equal to seq, so any seq above 255 is truncated on the wire.
 
-## Clipboard
+## Session behaviour in `BarrierClient`
 
-- `CCLP` (clipboard grab): `clipboardId (u8), seq (u32)` → server asks client for clipboard. Client replies `DCLP`.
-- `DCLP` (clipboard data): `clipboardId (u8), seq (u32), mark (u8), dataSize (u32), data` → clipboard content.
+After `DSOP`, state becomes `CONNECTED` and keepalive starts. `CIAK` does not change state by itself.
 
-## Options
+`CINN` stores `currentScreenSeq`. `COUT` emits `ScreenLeft` with that seq. Incoming clipboard packets are not checked against the seq.
 
-- `DSOP` (set options): list of `(id: u32, value: u32)` pairs.
-- `CROP` (reset options): no params → client resets to defaults.
+Keepalive: every 3000 ms the client sends `CALV` if still connected. A parallel watchdog closes the transport if `lastServerActivityNanos` is at least 9000 ms old. Both the timer and inbound packets update that timestamp, so the watchdog does not measure "missed server keepalives" independently of the client's own sends.
 
-Option IDs (4-char codes packed big-endian):
-| Code | Name | Value |
-|------|------|-------|
-| `CLPS` | Clipboard sharing | 0 = disabled |
-| `HART` | Heartbeat | seconds |
-| `SSVR` | Screensaver sync | 0 = disabled |
-| `MDLT` | Relative mouse moves | 0 = disabled |
+Reconnect: `closeTransport` while state was `CONNECTED` starts a loop that waits `INITIAL_RECONNECT_BACKOFF_MILLIS`, then doubles up to `MAX_RECONNECT_BACKOFF_MILLIS`, and calls `performConnect`. `disconnect()` sets `userInitiatedClose` and does not schedule that loop. The Android service is not wired to let this loop run. See [architecture](architecture.md).
 
-## Screensaver
-
-- `CSEC`: `started (u8)` — screensaver state change.
-
-## Errors
-
-| Command | Meaning |
-|---------|---------|
-| `EICV` | Incompatible version (u16 major, u16 minor) |
-| `EBSY` | Server busy |
-| `EUNK` | Unknown client |
-| `EBAD` | Protocol error |
-| `CBYE` | Close connection |
-
-## Client → server packets
-
-| Command | Packet | Fields |
-|---------|--------|--------|
-| `HELLO` | HelloBack | major (u16), minor (u16), nameLen (u32), name |
-| `DINF` | ScreenInfo | xOrigin, yOrigin, width, height, warpZone, mouseX, mouseY (all u16) |
-| `CNOP` | NoOp | — |
-| `CALV` | KeepAlive | — |
-| `DCLP` | ClipboardData | clipboardId (u8), seq (u32), mark (u8), dataSize (u32), data |
-| `COUT` | ScreenLeft | — (sent by server; client sends CNOP in reply) |
-
-## Sequence numbers
-
-The server increments `seq` per screen switch (`CINN`). The client tracks `currentScreenSeq` and uses it for clipboard (`CCLP`/`DCLP`) traffic. Missequenced events are ignored by the server.
+Option ids this client names are listed in [configuration](configuration.md). Storing them does not change keepalive, clipboard, or pointer handling.

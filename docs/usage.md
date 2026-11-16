@@ -1,62 +1,54 @@
-# Usage
+# Using the app
 
-## 1. Enable the accessibility service
+The screen is a small form. It does not join a Barrier server. This page describes what the current build actually does, not the intended KVM session.
 
-BarrierAndroid cannot inject input unless the accessibility service is enabled by the user.
+## Screen
 
-1. Open **Settings → Accessibility** on the Android device.
-2. Find **BarrierAndroid** (under "Downloaded services" or "Installed services").
-3. Toggle it **On** and accept the permission dialog.
+| Control | Id | Behaviour |
+|---------|----|-----------|
+| Barrier Server Host | `serverHostEditText` | Free text. Hint `e.g. 192.168.1.50`. Not validated |
+| Barrier Server Port | `serverPortEditText` | Number. If empty or not an integer, the code uses `24800` |
+| Client Name | `clientNameEditText` | If empty after trim, the code uses `AndroidBarrierClient` |
+| Connect | `connectButton` | Starts the foreground service. Does not open a socket. See below |
+| Disconnect | `disconnectButton` | `stopService` on `BarrierForegroundService` |
+| Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings. With this manifest it stays disabled |
+| Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
+| Error line | `errorTextView` | Red text for the cases listed below |
+| Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
 
-> The app shows the current status on the main screen: "Accessibility service: enabled/disabled". If disabled, an **Open Accessibility Settings** button is shown.
+The status line is set to `DISCONNECTED` when the activity is created. Connect does not change it, because no client is started and `CONNECTING` / `HANDSHAKE` are not reported to the listener anyway.
 
-## 2. Connect to the Barrier server
+## Connect
 
-1. Launch **BarrierAndroid**.
-2. Enter the **Server Host** (IP or hostname of the Barrier server).
-3. Enter the **Server Port** (default `24800`).
-4. Enter a **Client Name** (default `AndroidBarrierClient`; must match the screen name configured on the server).
-5. Tap **Connect**.
+1. If `BarrierAccessibilityService.isEnabled()` is false, the error line is set to `Accessibility service not enabled; input injection will not work.` and a toast says `Enable the accessibility service first.` The tap still continues.
+2. A `PendingConnection` is stored on the service **companion**.
+3. `startService` is called inside `runCatching`. A failure is ignored. There is no success message.
 
-The status line shows the connection state:
+The service's `onStartCommand` does not read that companion property. It posts a foreground notification titled `Barrier`, text `Waiting for Barrier server`, channel `Barrier Input`, and returns `START_STICKY`. No TCP connection is attempted.
 
-| State | Meaning |
-|-------|---------|
-| `CONNECTING` | Opening TCP/TLS connection |
-| `HANDSHAKE` | Hello/HelloBack + screen info exchange |
-| `CONNECTED` | Ready; receiving input |
-| `DISCONNECTED` | Not connected (or reconnecting with backoff) |
+On Android 5.1 through 9, that `startForeground` / `NotificationChannel` path crashes instead of showing the notification. See [limitations](limitations.md).
 
-## 3. Configure the server
+## Disconnect
 
-On the Barrier server:
+**Disconnect** stops the service. So does leaving the activity (`onDestroy` calls `stopService`). There is no separate "keep running in the background" control. The notification goes away when the service is destroyed.
 
-1. Open the server configuration.
-2. Add a new screen with the **exact client name** you entered in the app (case-sensitive).
-3. Position it in the grid relative to the server screen.
-4. Apply.
+If a client were running, service destruction would call `disconnect()`, which suppresses reconnect. That path is not reached from Connect today.
 
-## 4. Input delivery
+## Accessibility button
 
-Once connected, input from the server is injected into the Android device:
+**Open Accessibility Settings** starts `Settings.ACTION_ACCESSIBILITY_SETTINGS`. BarrierAndroid is not registered with the meta-data Android requires for an accessibility service, so it will not appear in that list. Enabling "the service" is not possible with this build.
 
-- **Mouse motion** (absolute and relative) → pointer moves via gesture dispatch
-- **Mouse buttons** (down/up) → gesture tap
-- **Scroll wheel** → scroll gesture
-- **Text** → injected into the focused editable field via `ACTION_SET_TEXT`
-- **Back / Home / Recents** → global actions
+The status text is refreshed in `onCreate` and `onResume`.
 
-> **Limitation**: arbitrary keycodes (letters, digits, modifiers) are not yet injectable via the public accessibility API. Text delivery works through the clipboard/text path (`ACTION_SET_TEXT`), not keystroke-by-keystroke.
+## Clipboard and typing
 
-## 5. Clipboard sync
+Nothing in the running app reads or writes the clipboard, and nothing injects text or pointer events. Those methods exist on `BarrierAccessibilityService` and `MainActivity`, but they run only when a `BarrierClient` listener fires. Connect never creates that client.
 
-- When the server grabs the client clipboard (CCLP), the app reads the device clipboard and replies (DCLP).
-- When the server pushes clipboard data (DCLP), the app stores it into the device clipboard and injects it into the focused field.
+If that path is fixed later, the clipboard handler as written will:
 
-## 6. Background operation
+- On a server grab (`CCLP`), read the first text item of the primary clip, or send empty bytes.
+- On server clipboard data (`DCLP`), decode the payload as UTF-8, set the primary clip to a plain-text clip labeled `barrier`, then try `injectText`, which replaces a focused editable field rather than typing keystrokes.
 
-The app runs a **foreground service** while connected, so the connection and injection survive backgrounding. A persistent notification ("Barrier") is shown. Tap **Disconnect** to stop.
+## What a real session would still need
 
-## 7. Reconnect
-
-If the server drops the connection, the client reconnects automatically with exponential backoff (1s → 2s → 4s → … → 30s). User-initiated disconnects do not auto-reconnect.
+Even after the service reads the pending connection, a usable session still needs a real socket (plaintext and Barrier TLS), non-zero screen size in `DINF`, a properly registered accessibility service, and injection that matches Barrier events. None of that is in place. Details are in [limitations](limitations.md) and [configuration](configuration.md).
