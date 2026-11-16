@@ -48,3 +48,7 @@ Requirements and commands are in [Installation](docs/installation.md). Short ver
 ```
 
 The debug APK is `app/build/outputs/apk/debug/app-debug.apk`. Installing it will not give you a working Barrier screen.
+
+## License
+
+This project is licensed under the [GNU General Public License v2.0](LICENSE), matching the license of the [Barrier](https://github.com/debauchee/barrier) project it interoperates with.
