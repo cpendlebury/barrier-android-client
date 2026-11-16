@@ -16,7 +16,7 @@ The greeting command is the 7-byte ASCII string `Barrier`, not a 4-byte command.
 
 | Payload length after the 7-byte command | Decoded as | Direction this client uses |
 |------------------------------------------|------------|----------------------------|
-| Exactly 4 more bytes (11 total): major u16, minor u16 | `Hello` | Server → client. Client sends this first as well, via `BarrierPacket.Hello.encode` |
+| Exactly 4 more bytes (11 total): major u16, minor u16 | `Hello` | Server → client. The client does not send this; it waits for the server's. |
 | Longer: major u16, minor u16, name length u32 at offset 11, name at offset 15 | `HelloBack` | Client → server, in reply to a compatible `Hello` |
 
 Decode does not check that the buffer is long enough for the name. A short hello-back will throw rather than return null.
@@ -63,7 +63,7 @@ Unknown 4-byte commands return null, and the socket reader then stops. These com
 
 | When | Packet |
 |------|--------|
-| Start of `performConnect` | `Hello` (versions only, 11-byte payload) |
+| `performConnect` (connect / reconnect) | nothing; waits for the server's `Hello` |
 | Compatible server `Hello` | `HelloBack` (versions, then UTF-8 name) |
 | `QINF` | `DINF` with origins 0, configured size, warp 0, mouse 0,0 |
 | `CALV`, and the keepalive timer | `CALV` |

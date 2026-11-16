@@ -16,11 +16,10 @@ import java.util.concurrent.TimeUnit
  * those are not wired to a live client today (see [com.crrpendlebury.barrierandroid.BarrierForegroundService]).
  *
  * Handshake this object actually performs:
- * 1. Send an 11-byte [BarrierPacket.Hello].
+ * 1. Open the transport and wait. The server sends `Hello` first.
  * 2. On a compatible server hello, send [BarrierPacket.HelloBack] carrying [clientName].
  * 3. On `QINF`, send `DINF` using [screenWidth] and [screenHeight]. Both default
- *    to 0. Nothing in the app sets them, so a real server would be told the
- *    screen is 0 by 0.
+ *    to 0. The service now sets them from display metrics.
  * 4. Ignore `CIAK`. Enter [BarrierClientState.CONNECTED] only when `DSOP` arrives.
  *
  * [scope] owns keepalive, the watchdog, and reconnect. Tests pass
@@ -239,8 +238,8 @@ class BarrierClient(
     // ------------------------------------------------------------------
 
     private suspend fun handleHello(packet: BarrierPacket.Hello) {
-        // The client supports protocol major version PROTOCOL_MAJOR_VERSION with
-        // at least PROTOCOL_MINOR_VERSION; anything older is incompatible.
+        // Server's hello. The client sends HelloBack only for a compatible
+        // version. This is the only place that sends HelloBack.
         val compatible = packet.versionMajor == PROTOCOL_MAJOR_VERSION &&
             packet.versionMinor >= PROTOCOL_MINOR_VERSION
         if (!compatible) {
@@ -616,7 +615,9 @@ class BarrierClient(
         state = BarrierClientState.CONNECTING
         try {
             transport.connect(serverHost, serverPort, useTls)
-            send(BarrierPacket.Hello(PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION))
+            // Do not send Hello here. In Barrier's protocol the server sends
+            // Hello first and the client answers with HelloBack (see handleHello).
+            // Sending our own Hello makes the server reply with EBAD.
             state = BarrierClientState.HANDSHAKE
         } catch (e: Exception) {
             notifyError(BarrierError.ConnectionFailed(e.message ?: "connection failed"))

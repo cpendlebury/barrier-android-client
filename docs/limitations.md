@@ -35,7 +35,9 @@ Tapping **Connect**:
 
 `onStartCommand` now reads the companion property (previously it read an instance field that was never set, so nothing happened). It assigns the activity listener to `connectionListener`, copies the clipboard lambdas, sets screen dimensions from display metrics, and calls `startConnection`, which builds a `SocketBarrierTransport` and a `BarrierClient` on the service scope. The client's `connect()` is launched on the service scope.
 
-So a `BarrierClient` is now constructed and its handshake coroutine runs. However, the socket it uses (`SocketBarrierTransport`) does not implement a working Barrier connection — see [Network](#network). The client will attempt `transport.connect`, which uses a reflection hack on `SSLSocketFactory` that fails on a normal Android runtime. The coroutine fails silently (no `BarrierError` is surfaced for socket failures).
+So a `BarrierClient` is now constructed and its handshake coroutine runs. The client no longer sends `Hello` first; it waits for the server's `Hello` and responds with `HelloBack`. This matches Barrier's protocol. Previously the client sent `Hello` first, causing the server to reply with `EBAD` (protocol error).
+
+However, the socket it uses (`SocketBarrierTransport`) does not implement a working Barrier connection — see [Network](#network). The client will attempt `transport.connect`, which now opens a plain or TLS socket. The TLS path uses a trust-all manager and may or may not handshake with a real Barrier server. The coroutine fails silently if the socket throws (no `BarrierError` is surfaced for socket failures, though `performConnect` now calls `notifyError`).
 
 The status line receives `CONNECTING`, `HANDSHAKE`, and `CONNECTED` callbacks now that the listener is wired. `CONNECTING` and `HANDSHAKE` are not notified by `BarrierClient.connect()` (only `CONNECTED` is, via `handleSetOptions`), so the status jumps from `DISCONNECTED` to `CONNECTED` on a successful handshake.
 

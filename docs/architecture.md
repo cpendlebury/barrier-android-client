@@ -73,7 +73,7 @@ Breaks on that path, in order:
 
 `BarrierClient` is the piece the tests cover.
 
-- `connect` records host, port, and TLS flag, then `performConnect`: set transport callback, state `CONNECTING`, `transport.connect`, send `Hello`, state `HANDSHAKE`. It does not notify the listener for those two states.
+- `connect` records host, port, and TLS flag, then `performConnect`: set transport callback, state `CONNECTING`, `transport.connect`, state `HANDSHAKE`. It does not send `Hello`; the server sends `Hello` first and the client answers with `HelloBack`. It does not notify the listener for those two states.
 - A compatible server `Hello` (major 1, minor ≥ 6) is answered with `HelloBack`. Otherwise `IncompatibleVersion` and close.
 - `QINF` is answered with `DINF` using `screenWidth` / `screenHeight` (0 unless the caller sets them).
 - `CIAK` is ignored. `DSOP` applies options, sets `CONNECTED`, notifies, and starts keepalive plus a watchdog.

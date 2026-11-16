@@ -38,9 +38,10 @@ class BarrierClientTest {
         runCurrent()
         advanceUntilIdle()
 
-        // Client hello sent, waiting for server hello.
+        // Connected to transport, waiting for the server's hello. The client
+        // does not send Hello first; Barrier's protocol has the server send it.
         assertEquals(BarrierClientState.HANDSHAKE, client.currentState)
-        assertTrue(transport.sentPackets.any { it is BarrierPacket.Hello })
+        assertTrue(transport.sentPackets.none { it is BarrierPacket.Hello })
 
         // Server hello -> client hello back.
         transport.emit(BarrierPacket.Hello(versionMajor = 1, versionMinor = 6))
@@ -142,10 +143,10 @@ class BarrierClientTest {
         assertEquals(listOf(BarrierClientState.CONNECTED, BarrierClientState.DISCONNECTED), states)
 
         // Server closed the connection; the client schedules a reconnect with
-        // backoff and re-runs the handshake.
+        // backoff and re-runs the handshake. The client does not send Hello;
+        // it waits for the server's. State HANDSHAKE is the evidence that
+        // performConnect ran again.
         assertEquals(BarrierClientState.HANDSHAKE, client.currentState)
-        val hellos = transport.sentPackets.filterIsInstance<BarrierPacket.Hello>()
-        assertEquals(2, hellos.size)
     }
 
     @Test
