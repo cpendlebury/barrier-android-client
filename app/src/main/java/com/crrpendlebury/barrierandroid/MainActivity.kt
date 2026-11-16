@@ -140,6 +140,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val prefs by lazy { getSharedPreferences("barrier_settings", Context.MODE_PRIVATE) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -161,15 +163,44 @@ class MainActivity : ComponentActivity() {
             BarrierAccessibilityService.instance?.mouseMovementEnabled = isChecked
         }
 
+        // Restore from SharedPreferences (survives process death).
+        serverHostEditText.setText(prefs.getString("host", ""))
+        serverPortEditText.setText(prefs.getString("port", ""))
+        clientNameEditText.setText(prefs.getString("clientName", ""))
+
+        // Save on every text change so settings survive even abrupt process death.
+        val saveSettings = {
+            prefs.edit()
+                .putString("host", serverHostEditText.text.toString())
+                .putString("port", serverPortEditText.text.toString())
+                .putString("clientName", clientNameEditText.text.toString())
+                .apply()
+        }
+        serverHostEditText.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) { saveSettings() }
+        })
+        serverPortEditText.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) { saveSettings() }
+        })
+        clientNameEditText.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) { saveSettings() }
+        })
+
+        // Also restore from savedInstanceState if available (overrides prefs).
+        savedInstanceState?.let { bundle ->
+            serverHostEditText.setText(bundle.getString("host", serverHostEditText.text.toString()))
+            serverPortEditText.setText(bundle.getString("port", serverPortEditText.text.toString()))
+            clientNameEditText.setText(bundle.getString("clientName", clientNameEditText.text.toString()))
+        }
+
         updateStatus(BarrierClientState.DISCONNECTED)
         updateAccessibilityStatus()
-
-        // Restore saved field values if the activity was recreated.
-        savedInstanceState?.let { bundle ->
-            serverHostEditText.setText(bundle.getString("host", ""))
-            serverPortEditText.setText(bundle.getString("port", ""))
-            clientNameEditText.setText(bundle.getString("clientName", ""))
-        }
 
         // Re-attach to a running service if the activity was recreated.
         BarrierForegroundService.instance?.let { service ->
@@ -182,6 +213,17 @@ class MainActivity : ComponentActivity() {
         outState.putString("host", serverHostEditText.text.toString())
         outState.putString("port", serverPortEditText.text.toString())
         outState.putString("clientName", clientNameEditText.text.toString())
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Persist settings on every pause so they survive process death.
+        // Use commit() for synchronous disk write.
+        prefs.edit()
+            .putString("host", serverHostEditText.text.toString())
+            .putString("port", serverPortEditText.text.toString())
+            .putString("clientName", clientNameEditText.text.toString())
+            .commit()
     }
 
     override fun onResume() {
@@ -210,6 +252,15 @@ class MainActivity : ComponentActivity() {
         val host = serverHostEditText.text.toString().trim()
         val port = serverPortEditText.text.toString().toIntOrNull() ?: DEFAULT_BARRIER_PORT
         val clientName = clientNameEditText.text.toString().trim().ifEmpty { DEFAULT_CLIENT_NAME }
+
+        // Persist settings so they survive process death. Use commit() for
+        // synchronous disk write — apply() is async and may not flush before
+        // the process is killed.
+        prefs.edit()
+            .putString("host", host)
+            .putString("port", port.toString())
+            .putString("clientName", clientName)
+            .commit()
 
         if (!BarrierAccessibilityService.isEnabled(this)) {
             errorTextView.text = "Accessibility service not enabled; input injection will not work."

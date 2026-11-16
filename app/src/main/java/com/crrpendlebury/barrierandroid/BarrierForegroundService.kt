@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
+import android.net.wifi.WifiManager
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.crrpendlebury.barrierandroid.protocol.BarrierClient
@@ -19,6 +20,8 @@ import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientListener
 import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
 import com.crrpendlebury.barrierandroid.protocol.BarrierClientState
+import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
+import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
 import com.crrpendlebury.barrierandroid.protocol.SocketBarrierTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +75,7 @@ class BarrierForegroundService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     /**
      * Forwards client lifecycle to the hosting activity. Does not stop the
@@ -117,17 +121,47 @@ class BarrierForegroundService : Service() {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BarrierAndroid::Connection").apply {
                 setReferenceCounted(false)
+                acquire() // Hold indefinitely while service runs
+            }
+        }
+
+        // Acquire a wifi lock to keep WiFi active while backgrounded.
+        if (wifiLock == null) {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "BarrierAndroid::Connection").apply {
+                setReferenceCounted(false)
                 acquire()
             }
         }
 
-        // Read the companion property the activity actually writes. The
-        // instance field of the same name was never assigned and is removed.
+        // Read the companion property the activity actually writes.
         val pending = Companion.pendingConnection
         Companion.pendingConnection = null
         if (pending != null) {
             connectionListener = pending.listener
             startConnection(pending)
+        } else {
+            // Service restarted by START_STICKY without a pending connection.
+            // Try to reconnect from saved settings.
+            val prefs = getSharedPreferences("barrier_settings", Context.MODE_PRIVATE)
+            val host = prefs.getString("host", null)
+            val port = prefs.getString("port", null)?.toIntOrNull() ?: DEFAULT_BARRIER_PORT
+            val clientName = prefs.getString("clientName", null) ?: DEFAULT_CLIENT_NAME
+            if (host != null && host.isNotBlank()) {
+                val listener = connectionListener
+                if (listener != null) {
+                    val pendingConn = PendingConnection(
+                        host = host,
+                        port = port,
+                        clientName = clientName,
+                        listener = listener,
+                        onClipboardGrab = null,
+                        onClipboardData = null,
+                        onScreenSaverChanged = null,
+                    )
+                    startConnection(pendingConn)
+                }
+            }
         }
         val notification = buildForegroundNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -147,6 +181,8 @@ class BarrierForegroundService : Service() {
         serviceScope.cancel()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        wifiLock?.let { if (it.isHeld) it.release() }
+        wifiLock = null
         Companion.instance = null
         super.onDestroy()
     }
