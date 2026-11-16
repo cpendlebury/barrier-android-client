@@ -65,29 +65,26 @@ Socket read errors now invoke `onConnectionLost`, which calls `BarrierClient.clo
 
 `screenWidth` and `screenHeight` are set from `resources.displayMetrics` in the service before connect, so `DINF` advertises the real device resolution.
 
-## Options and reconnect do less than the names suggest
+## Options and reconnect
 
-`applyOptions` stores:
+`applyOptions` now stores and applies:
 
-- `CLPS` → `clipboardSharingEnabled` (default true)
-- `HART` → `heartbeatSeconds` (default 0)
-- `SSVR` → `screenSaverSyncEnabled` (default false)
+- `CLPS` → `clipboardSharingEnabled` (default true). `handleClipboardGrab` returns empty data when disabled; `handleClipboardData` skips storing.
+- `HART` → `heartbeatSeconds` and `keepAliveIntervalMillis` (if > 0). The keepalive timer now uses the requested interval.
+- `SSVR` → `screenSaverSyncEnabled` (default false). Still only stored; screensaver sync does not lock the device.
+- `MDLT` → declared but still not read.
 
-Clipboard grab and clipboard data ignore `clipboardSharingEnabled`. The keepalive interval stays 3000 ms and ignores `heartbeatSeconds`. `MDLT` is defined and never read. Screensaver sync only stores a boolean; it does not lock the device or dismiss a dream.
-
-`BarrierClient` can schedule reconnect after a drop from `CONNECTED`. The foreground service's `clientListener` wrapper calls `stopSelf()` on every `DISCONNECTED` callback, which cancels the service scope and the reconnect job. Reconnect is unit-tested but does not survive in the app. The `stopSelf`-on-disconnect and reconnect need to be reconciled before reconnect works end to end.
+`BarrierClient` can schedule reconnect after a drop from `CONNECTED`. The foreground service's `clientListener` no longer calls `stopSelf()` on `DISCONNECTED`, so the reconnect scope survives. The service is still stopped by the activity's Disconnect button or `onDestroy`.
 
 ## Foreground service on real devices
 
-`onStartCommand` always calls `NotificationChannel` (API 26) and `startForeground(int, Notification, int)` (API 29). `minSdk` is 22. On Android 5.1–9 this crashes as soon as the service starts.
+`onStartCommand` now guards `NotificationChannel` creation (API 26) and the three-argument `startForeground` (API 29) with `SDK_INT` checks, so the service no longer crashes on Android 5.1–9. The manifest declares `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` for Android 14+.
 
-The manifest type is `specialUse`, but there is no `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` property. Android 14 and later can reject that foreground start.
-
-The notification text is fixed: "Waiting for Barrier server". It is not updated when a connection would succeed.
+The notification text is still fixed: "Waiting for Barrier server". It is not updated when a connection would succeed.
 
 ## Other leftovers
 
 - `settings.gradle.kts` sets `rootProject.name = "BarrierAndroid"`. The application id and launcher name are unchanged by that string.
-- Compose, Retrofit, and Gson are on the classpath. The UI is XML views. Nothing calls Retrofit or Gson.
+- Compose is still on the classpath and unused. The UI is XML views. Retrofit and Gson were removed.
 - Version in the manifest is the template `versionName` 1.0 / `versionCode` 1. That is not a release.
 - File-transfer (`DFTR`) and drag (`DDRG`) packets are decoded and ignored.
