@@ -40,10 +40,10 @@ android {
 }
 
 dependencies {
-    // Compose, Retrofit, and Gson are on the classpath and unused.
-    // The UI is res/layout/activity_main.xml. Do not add a Compose screen
-    // beside that layout without removing one of them. Do not call Retrofit
-    // for Barrier; the protocol is a length-prefixed TCP session.
+    // Compose is on the classpath and unused. The UI is res/layout/activity_main.xml.
+    // Do not add a Compose screen beside that layout without removing one of them.
+    // Retrofit and Gson were removed: nothing called them, and the protocol is
+    // a length-prefixed TCP session, not HTTP.
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -61,8 +61,5 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

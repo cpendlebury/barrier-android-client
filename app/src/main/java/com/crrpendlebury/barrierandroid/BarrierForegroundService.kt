@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
+import android.os.Build
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
@@ -69,14 +70,16 @@ class BarrierForegroundService : Service() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** Forwards client lifecycle to the hosting activity and stops the service on unexpected disconnect. */
+    /**
+     * Forwards client lifecycle to the hosting activity. Does not stop the
+     * service on [BarrierClientState.DISCONNECTED]: that state is published by
+     * [BarrierClient.closeTransport] before it schedules a reconnect, so
+     * stopping here cancels the service scope and the reconnect job. The
+     * service is stopped by the activity's Disconnect button or onDestroy.
+     */
     private val clientListener = object : BarrierClientListener {
         override fun onStateChanged(state: BarrierClientState) {
             connectionListener?.onStateChanged(state)
-            if (state == BarrierClientState.DISCONNECTED) {
-                // Unexpected disconnect: release the foreground service.
-                mainHandler.post { stopSelf() }
-            }
         }
 
         override fun onInputEvent(event: BarrierInputEvent) {
@@ -105,11 +108,16 @@ class BarrierForegroundService : Service() {
             connectionListener = pending.listener
             startConnection(pending)
         }
-        startForeground(
-            FOREGROUND_NOTIFICATION_ID,
-            buildForegroundNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-        )
+        val notification = buildForegroundNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+        }
         return Service.START_STICKY
     }
 
@@ -162,14 +170,16 @@ class BarrierForegroundService : Service() {
     }
 
     private fun buildForegroundNotification(): Notification {
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Barrier Input",
-            NotificationManager.IMPORTANCE_LOW,
-        )
-        notificationManager.createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Barrier Input",
+                NotificationManager.IMPORTANCE_LOW,
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Barrier")
             .setContentText("Waiting for Barrier server")

@@ -102,15 +102,21 @@ class BarrierClient(
 
     /**
      * Last `CLPS` value, non-zero meaning enabled. Default true.
-     * Not consulted by [handleClipboardGrab] or [handleClipboardData].
+     * Consulted by [handleClipboardGrab] and [handleClipboardData].
      */
     var clipboardSharingEnabled: Boolean = true
         private set
 
     /**
+     * Keepalive interval used by the timer. Defaults to [KEEP_ALIVE_INTERVAL_MILLIS].
+     * Updated by [applyOptions] when `HART` is received.
+     */
+    private var keepAliveIntervalMillis: Long = KEEP_ALIVE_INTERVAL_MILLIS
+
+    /**
      * Last `HART` value, in seconds, or 0 if the server has not sent one.
-     * The keepalive loop does not read this. It always waits
-     * [KEEP_ALIVE_INTERVAL_MILLIS].
+     * When non-zero, [applyOptions] sets [keepAliveIntervalMillis] to
+     * `value * 1000` and the keepalive timer uses it.
      */
     var heartbeatSeconds: Int = 0
         private set
@@ -295,7 +301,12 @@ class BarrierClient(
         for ((id, value) in options) {
             when (id) {
                 OPTION_CLIPBOARD_SHARING -> clipboardSharingEnabled = value != 0
-                OPTION_HEARTBEAT -> heartbeatSeconds = value
+                OPTION_HEARTBEAT -> {
+                    heartbeatSeconds = value
+                    if (value > 0) {
+                        keepAliveIntervalMillis = value * 1000L
+                    }
+                }
                 OPTION_SCREEN_SAVER_SYNC -> screenSaverSyncEnabled = value != 0
             }
         }
@@ -311,7 +322,7 @@ class BarrierClient(
         lastServerActivityNanos = System.nanoTime()
         keepAliveJob = scope.launch {
             while (isActive) {
-                delay(KEEP_ALIVE_INTERVAL_MILLIS)
+                delay(keepAliveIntervalMillis)
                 if (state != BarrierClientState.CONNECTED) {
                     break
                 }
@@ -326,12 +337,12 @@ class BarrierClient(
         }
         keepAliveWatchdogJob = scope.launch {
             while (isActive) {
-                delay(KEEP_ALIVE_INTERVAL_MILLIS)
+                delay(keepAliveIntervalMillis)
                 if (state != BarrierClientState.CONNECTED) {
                     break
                 }
                 val missedThresholdNanos = TimeUnit.MILLISECONDS.toNanos(
-                    (KEEP_ALIVE_INTERVAL_MILLIS * KEEP_ALIVES_UNTIL_DEATH).toLong(),
+                    (keepAliveIntervalMillis * KEEP_ALIVES_UNTIL_DEATH).toLong(),
                 )
                 if (System.nanoTime() - lastServerActivityNanos >= missedThresholdNanos) {
                     // Three missed keepalives: drop the connection.
@@ -441,13 +452,18 @@ class BarrierClient(
     }
 
     private suspend fun handleClipboardGrab(packet: BarrierPacket.ClipboardGrabPacket) {
-        // Server asked for the clipboard we hold. clipboardSharingEnabled is
-        // not checked. A null provider is answered with an empty DCLP, not
-        // silence, so the server does not wait forever.
+        // Server asked for the clipboard we hold. If clipboard sharing is
+        // disabled by options, reply with empty data. A null provider is
+        // answered with an empty DCLP, not silence, so the server does not
+        // wait forever.
         //
         // mark is encoded as one byte. Copying seq into mark truncates any
         // sequence above 255. See BarrierPacket.ClipboardDataPacket.encode.
-        val data = onClipboardGrab?.invoke(packet.clipboardId, packet.seq) ?: ByteArray(0)
+        val data = if (clipboardSharingEnabled) {
+            onClipboardGrab?.invoke(packet.clipboardId, packet.seq) ?: ByteArray(0)
+        } else {
+            ByteArray(0)
+        }
         transport.send(
             BarrierPacket.ClipboardDataPacket(
                 clipboardId = packet.clipboardId,
@@ -459,7 +475,11 @@ class BarrierClient(
     }
 
     private suspend fun handleClipboardData(packet: BarrierPacket.ClipboardDataPacket) {
-        // Clipboard data received from the server; retained and surfaced to the host.
+        // Clipboard data received from the server; retained and surfaced to the
+        // host. Ignored when clipboard sharing is disabled by options.
+        if (!clipboardSharingEnabled) {
+            return
+        }
         receivedClipboardData = packet
         onClipboardData?.invoke(packet)
     }
