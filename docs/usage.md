@@ -1,6 +1,6 @@
 # Using the app
 
-The screen is a small form. It does not join a Barrier server. This page describes what the current build actually does, not the intended KVM session.
+The screen is a small form. The app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible. See [Status and limitations](limitations.md) for details.
 
 ## Screen
 
@@ -9,49 +9,44 @@ The screen is a small form. It does not join a Barrier server. This page describ
 | Barrier Server Host | `serverHostEditText` | Free text. Hint `e.g. 192.168.1.50`. Not validated |
 | Barrier Server Port | `serverPortEditText` | Number. If empty or not an integer, the code uses `24800` |
 | Client Name | `clientNameEditText` | If empty after trim, the code uses `AndroidBarrierClient` |
-| Connect | `connectButton` | Starts the foreground service. Does not open a socket. See below |
+| Connect | `connectButton` | Starts the foreground service, constructs a `BarrierClient`, attempts connection |
 | Disconnect | `disconnectButton` | `stopService` on `BarrierForegroundService` |
 | Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings |
 | Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
 | Mouse movement gestures | `mouseMovementCheckBox` | Toggles whether pure movement creates gestures. Disable to avoid phantom keystrokes on on-screen keyboards |
-| Error line | `errorTextView` | Red text for the cases listed below |
+| Error line | `errorTextView` | Red text for connection errors, injection failures, disabled-service warnings |
 | Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
 
-The status line is set to `DISCONNECTED` when the activity is created. Connect does not change it, because no client is started and `CONNECTING` / `HANDSHAKE` are not reported to the listener anyway.
+The status line starts at `DISCONNECTED`. On a successful connection it transitions to `CONNECTED`. On failure it shows an error message.
 
 ## Connect
 
-1. If `BarrierAccessibilityService.isEnabled()` is false, the error line is set to `Accessibility service not enabled; input injection will not work.` and a toast says `Enable the accessibility service first.` The tap still continues.
-2. A `PendingConnection` is stored on the service **companion**.
-3. `startService` is called inside `runCatching`. A failure is ignored. There is no success message.
+1. If the accessibility service is not enabled, a toast and error line warn the user, but the tap continues.
+2. A `PendingConnection` is stored on the service companion, including the activity listener, clipboard handlers, and a screensaver callback.
+3. `startService` is called inside `runCatching`.
 
-The service's `onStartCommand` now reads the companion property. It assigns the activity listener, copies clipboard handlers, sets screen dimensions from display metrics, builds a `BarrierClient`, and launches `connect()` on the service scope. A TCP connection is now attempted, but the socket implementation does not open a working Barrier socket (see [limitations](limitations.md)). The status line now receives `CONNECTED` on a successful handshake.
+`onStartCommand` reads the companion property, assigns the activity listener, copies clipboard handlers, sets screen dimensions from display metrics, and calls `startConnection`, which builds a `SocketBarrierTransport` and a `BarrierClient` on the service scope. The client's `connect()` is launched on the service scope.
 
-On Android 5.1 through 9, that `startForeground` / `NotificationChannel` path crashes instead of showing the notification. See [limitations](limitations.md).
+The client waits for the server's `Hello`, responds with `HelloBack`, then handles `QINF` → `DINF` → `CIAK` → `DSOP` → `CONNECTED`.
 
 ## Disconnect
 
-**Disconnect** stops the service. So does leaving the activity (`onDestroy` calls `stopService`). There is no separate "keep running in the background" control. The notification goes away when the service is destroyed.
-
-If a client were running, service destruction would call `disconnect()`, which suppresses reconnect. That path is not reached from Connect today.
+**Disconnect** stops the service. So does leaving the activity (`onDestroy` calls `stopService`). The notification goes away when the service is destroyed. There is no separate "keep running in the background" control.
 
 ## Accessibility button
 
-**Open Accessibility Settings** starts `Settings.ACTION_ACCESSIBILITY_SETTINGS`. BarrierAndroid is not registered with the meta-data Android requires for an accessibility service, so it will not appear in that list. Enabling "the service" is not possible with this build.
+**Open Accessibility Settings** starts `Settings.ACTION_ACCESSIBILITY_SETTINGS`. The service is registered with meta-data, so it appears in the list on Android. On Android 13+, sideloaded apps need "Allow restricted settings" before the service can be enabled.
 
 The status text is refreshed in `onCreate` and `onResume`.
 
 ## Clipboard and typing
 
-Nothing in the running app reads or writes the clipboard, and nothing injects text or pointer events. Those methods exist on `BarrierAccessibilityService` and `MainActivity`, but they run only when a `BarrierClient` listener fires. Connect never creates that client.
-
 **Clipboard-based typing path**: When the server pushes clipboard data (DCLP), the app stores it into the device clipboard and injects it into the focused editable field via `ACTION_SET_TEXT`. To type from the server, copy text on the server — it will be pushed to the phone and injected. Keystroke-by-keystroke typing is not possible (no public key injection API).
 
-If that path is fixed later, the clipboard handler as written will:
+## Mouse movement
 
-- On a server grab (`CCLP`), read the first text item of the primary clip, or send empty bytes.
-- On server clipboard data (`DCLP`), decode the payload as UTF-8, set the primary clip to a plain-text clip labeled `barrier`, then try `injectText`, which replaces a focused editable field rather than typing keystrokes.
+Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. There is no visible cursor. Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection while keeping button presses and scrolls.
 
-## What a real session would still need
+## What a real session still needs
 
-Even after the service reads the pending connection, a usable session still needs a real socket (plaintext and Barrier TLS), non-zero screen size in `DINF`, a properly registered accessibility service, and injection that matches Barrier events. None of that is in place. Details are in [limitations](limitations.md) and [configuration](configuration.md).
+Even with the connection working, a fully usable session still needs: a real socket (TLS or plaintext), proper injection (real pointer events, not gestures), and on-device validation. See [limitations](limitations.md) and [configuration](configuration.md).

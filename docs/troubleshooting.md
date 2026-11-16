@@ -1,36 +1,81 @@
 # Troubleshooting
 
-## Connect does nothing useful
+## Connect does not reach CONNECTED
 
-Expected with this tree. **Connect** starts a foreground service and does not open a socket. The status line stays `Barrier state: DISCONNECTED`. The notification, if the process gets that far, stays on "Waiting for Barrier server".
+**Connect** now starts the foreground service, constructs a `BarrierClient`, and attempts a TCP/TLS connection. The status line should progress from `DISCONNECTED` to `CONNECTED` if the handshake succeeds. If it stays `DISCONNECTED` or shows an error:
 
-Cause: `MainActivity` sets `BarrierForegroundService.pendingConnection` on the companion object. `onStartCommand` reads an instance field of the same name, which is always null. The activity's listener is never assigned to `connectionListener` either, so input would still be dropped after that read is fixed.
+- Verify the server host and port are correct.
+- Ensure the server is running and reachable (firewall, same network).
+- Check that the client name matches a configured screen on the server (case-sensitive).
+- Check logcat: `adb logcat -s BarrierAndroid BarrierForegroundService BarrierClient`
 
-This is not a firewall, hostname, or server-config problem.
+## "incompatible server version"
+
+The server speaks a protocol version older than 1.6. Upgrade the Barrier server to v2.4.0+.
+
+## "server is busy" / "server does not know this client" / "protocol error reported by server"
+
+- **Busy**: another client is connecting; retry.
+- **Unknown client**: the client name does not match any configured screen. Fix the name on the server.
+- **Protocol error**: version or framing mismatch; ensure both sides are v2.4.0. This was previously caused by the client sending `Hello` first (fixed).
+
+## TLS handshake failure
+
+The client uses a trust-all `TrustManager` (not Barrier's fingerprint-verified TLS). If the TLS handshake fails:
+
+- Check if the server is using TLS. If the server is in plaintext mode, the TLS handshake will fail because the server sends plaintext.
+- There is no plaintext toggle in the UI yet. The server must use TLS for the connection to succeed.
+- Check logcat for SSL exceptions.
 
 ## The accessibility service is not in Settings
 
-Expected. The manifest service has the bind permission and the intent action, and no `android.accessibilityservice` meta-data resource. Android does not list a service that lacks that XML. The button in the app only opens the system screen.
+The service is now registered with meta-data. Android should list it under Settings → Accessibility. If it does not appear:
 
-`Accessibility service: disabled` is the correct reading of secure settings for this build.
+- Ensure the APK was rebuilt after the manifest change.
+- On Android 13+, sideloaded apps need "Allow restricted settings" (Settings → Apps → BarrierAndroid → three-dot menu → Allow restricted settings) before the service can be enabled.
 
-## The app crashes when Connect is tapped
+`Accessibility service: disabled` is the correct reading of secure settings until the user toggles it on.
 
-On Android 5.1–9, `BarrierForegroundService` calls `NotificationChannel` and the three-argument `startForeground` with no `SDK_INT` check. Those require API 26 and API 29. `minSdk` 22 does not mean those versions work.
+## "App was denied access" (Android 13+)
 
-On Android 14 and later, a `specialUse` foreground service without `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` can be rejected. There is no such property in the manifest.
+When enabling the accessibility service on a sideloaded app, Android shows a warning about restricted permissions. To proceed:
 
-## "incompatible server version" / "server is busy" / "unknown client"
+1. Settings → Apps → BarrierAndroid
+2. Tap the three-dot menu (⋮) → "Allow restricted settings"
+3. Confirm the dialog
+4. Go back to Settings → Accessibility → BarrierAndroid → toggle On
 
-Those strings exist for `EICV`, `EBSY`, `EUNK`, and `EBAD` if a client is running and the listener is attached. The current app never gets there. If you see them, you are not running this wiring.
+## "Text injection failed (no focused editable field)"
 
-A TCP failure, TLS failure, or timeout will not show those messages. The transport does not map socket errors onto `BarrierError`.
+`ACTION_SET_TEXT` requires a focused, editable text field in the active window. If no such field is focused, injection fails.
 
-## Text injection failed / no focused field
+**Fix**: Tap into a text field (e.g., a search bar or message input) on the phone before triggering text delivery from the server.
 
-Those strings are only set from `handleClipboardData`, which only runs from `onClipboardData`. Connect does not register that callback on a live client, so this error means some other caller invoked the handler. It does not mean typing from the server works.
+## "Accessibility service not enabled; text not injected."
 
-## Build fails offline
+The accessibility service is disabled. Enable it via Settings → Accessibility.
+
+## Reconnect loop
+
+After a server drop, the client reconnects with exponential backoff (1s → 2s → 4s → … → 30s). If the server is down, this continues indefinitely. Tap **Disconnect** to stop.
+
+## Mouse movement issues
+
+- Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. There is no visible cursor.
+- Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection.
+- Scroll direction and amount are not preserved (swipes down a fixed 200 px).
+
+## Build issues
+
+### `androidx.appcompat` not cached
+
+The app does not depend on `appcompat`. If you add it, ensure it's cached or build online.
+
+### TLS reflection warning
+
+`SSLSocketFactory.createSSLSocket` is missing in `android-35`; the app uses reflection-free standard TLS now. This is expected and handled.
+
+### Gradle offline
 
 `--offline` is for a machine that already cached the dependencies. A fresh clone needs network. Remove `--offline` and retry.
 
@@ -40,4 +85,4 @@ Those strings are only set from `handleClipboardData`, which only runs from `onC
 
 ## Tests pass but the phone does nothing
 
-That is consistent. The 27 unit tests drive `BarrierClient` through `FakeBarrierTransport`. They never start `BarrierForegroundService`, never open a socket, and never enable an accessibility service.
+The 27 unit tests drive `BarrierClient` through `FakeBarrierTransport`. They never start `BarrierForegroundService`, never open a socket, and never enable an accessibility service. A passing test suite does not mean the app works on a device.

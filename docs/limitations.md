@@ -14,7 +14,7 @@ That product is not what the current app does.
 
 Covered there:
 
-- Hello / HelloBack framing, including the 11-byte hello versus a longer hello-back
+- Hello / HelloBack framing, including the 11-byte hello versus a longer hello-back (client waits for server's Hello, does not send Hello first)
 - Query-info reply, info-ack, and transition to `CONNECTED` after `DSOP`
 - Key, pointer, wheel, and button events delivered to a listener, each answered with `CNOP`
 - Keepalive reply
@@ -37,13 +37,13 @@ Tapping **Connect**:
 
 So a `BarrierClient` is now constructed and its handshake coroutine runs. The client no longer sends `Hello` first; it waits for the server's `Hello` and responds with `HelloBack`. This matches Barrier's protocol. Previously the client sent `Hello` first, causing the server to reply with `EBAD` (protocol error).
 
-However, the socket it uses (`SocketBarrierTransport`) does not implement a working Barrier connection — see [Network](#network). The client will attempt `transport.connect`, which now opens a plain or TLS socket. The TLS path uses a trust-all manager and may or may not handshake with a real Barrier server. The coroutine fails silently if the socket throws (no `BarrierError` is surfaced for socket failures, though `performConnect` now calls `notifyError`).
+However, the socket it uses (`SocketBarrierTransport`) does not implement a working Barrier connection — see [Network](#network). The client will attempt `transport.connect`, which now opens a plain or TLS socket. The TLS path uses a trust-all manager and may or may not handshake with a real Barrier server. Socket failures are surfaced via `BarrierError.ConnectionFailed` (from `performConnect`) and via `onConnectionLost` → `closeTransport`.
 
 The status line receives `CONNECTING`, `HANDSHAKE`, and `CONNECTED` callbacks now that the listener is wired. `CONNECTING` and `HANDSHAKE` are not notified by `BarrierClient.connect()` (only `CONNECTED` is, via `handleSetOptions`), so the status jumps from `DISCONNECTED` to `CONNECTED` on a successful handshake.
 
 Tapping **Disconnect** stops the service. Leaving the activity also stops it (`onDestroy`).
 
-If the client reaches `DISCONNECTED` (server close), the service's `clientListener` wrapper calls `stopSelf()`, which cancels the service scope and any pending reconnect. Reconnect does not survive in the app.
+If the client reaches `DISCONNECTED` (server close), the service's `clientListener` wrapper no longer calls `stopSelf()`. The reconnect scope survives. The service is stopped by the activity's Disconnect button or `onDestroy`.
 
 ## Accessibility service
 
@@ -51,7 +51,7 @@ The service class exists and is now registered in the manifest with a meta-data 
 
 `isEnabled()` checks `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`. It returns true only after the user toggles the service on.
 
-The injection methods are still not a working input path, but they are less wrong than before:
+The injection methods are still not a working input path, but they are less wrong than before (Phase C improvements applied):
 
 - `injectPointer` now consults the motion action. `ACTION_DOWN` is a tap at (x, y). `ACTION_UP` is a tap at the last position. `ACTION_MOVE` is a short stroke (20 ms) from the last position to (x, y), throttled to 8 px minimum movement to reduce phantom interactions. `ACTION_SCROLL` is a downward swipe of 200 px over 100 ms. `dispatchGesture` still creates discrete, fire-and-forget gestures; it cannot hold a button down or track a continuous drag the way a real mouse does. Scroll has no axis data (the caller passes a point, not deltas). Wheel events from the server (`MouseWheelPacket`) are sent as `ACTION_SCROLL` at `(0, 0)` by `MainActivity`, so scroll direction and amount are lost.
 - A "Inject mouse movement gestures" checkbox in the UI toggles whether pure movement creates gestures. When disabled, only button presses and scrolls inject. This eliminates phantom keystrokes on on-screen keyboards caused by movement strokes passing over key areas. The toggle is applied when the service connects.
