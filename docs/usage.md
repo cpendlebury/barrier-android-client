@@ -24,7 +24,7 @@ The status line is set to `DISCONNECTED` when the activity is created. Connect d
 2. A `PendingConnection` is stored on the service **companion**.
 3. `startService` is called inside `runCatching`. A failure is ignored. There is no success message.
 
-The service's `onStartCommand` does not read that companion property. It posts a foreground notification titled `Barrier`, text `Waiting for Barrier server`, channel `Barrier Input`, and returns `START_STICKY`. No TCP connection is attempted.
+The service's `onStartCommand` now reads the companion property. It assigns the activity listener, copies clipboard handlers, sets screen dimensions from display metrics, builds a `BarrierClient`, and launches `connect()` on the service scope. A TCP connection is now attempted, but the socket implementation does not open a working Barrier socket (see [limitations](limitations.md)). The status line now receives `CONNECTED` on a successful handshake.
 
 On Android 5.1 through 9, that `startForeground` / `NotificationChannel` path crashes instead of showing the notification. See [limitations](limitations.md).
 

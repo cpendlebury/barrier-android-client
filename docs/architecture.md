@@ -38,13 +38,17 @@ MainActivity.connectToBarrierServer()
   startService(BarrierForegroundService)
 
 BarrierForegroundService.onStartCommand()
-  reads this.pendingConnection          # instance field, always null
-  startForeground(...)                  # notification only
+  reads Companion.pendingConnection      # now wired
+  assigns connectionListener from pending.listener
+  startConnection(pending)              # builds client + transport
+  startForeground(...)                  # notification
 ```
 
-`startConnection()` exists and would build a `SocketBarrierTransport` plus a `BarrierClient` on `SupervisorJob() + Dispatchers.IO`. Nothing calls it.
+`startConnection()` now builds a `SocketBarrierTransport` and a `BarrierClient` on `SupervisorJob() + Dispatchers.IO`. It copies the clipboard lambdas and `onScreenSaverChanged` from the pending connection, and sets `screenWidth`/`screenHeight` from display metrics. The client's `connect()` is launched on the service scope.
 
-`clientListener` forwards state, input, and errors to `connectionListener`. Nothing assigns `connectionListener`. The listener stored inside `PendingConnection` is unused. Clipboard lambdas on that same object are also unused, because `startConnection` is the only code that would copy them onto the client.
+`clientListener` forwards state, input, and errors to `connectionListener` (now assigned). Input events reach the activity listener, which routes them to `BarrierAccessibilityService`. Clipboard data reaches `handleClipboardData`.
+
+The break is no longer at the service wiring step. It is now at the socket (see below) and at the accessibility service registration (fixed in the manifest, but injection still does not match real Barrier events).
 
 ## Intended path, not the one that runs
 
@@ -61,11 +65,9 @@ Barrier server
 
 Breaks on that path, in order:
 
-1. The service never constructs the client (companion vs instance `pendingConnection`).
-2. Even then, the activity listener is not the listener passed to `BarrierClient`.
-3. `SocketBarrierTransport.createSocket()` does not open a plain TCP socket and does not implement Barrier TLS. `connect()` is invoked on a socket that `createSocket(host, port)` has already connected.
-4. The accessibility service is not declared correctly, so `instance` stays null and injection returns immediately.
-5. `injectPointer` / `injectKey` do not implement the events they claim to. See [limitations](limitations.md).
+1. `SocketBarrierTransport.createSocket()` does not open a plain TCP socket and does not implement Barrier TLS. `connect()` is invoked on a socket that `createSocket(host, port)` has already connected. This is the current blocker.
+2. The accessibility service is now declared with meta-data, but `injectPointer` / `injectKey` / `injectText` do not implement the events they claim to. See [limitations](limitations.md).
+3. The service's `stopSelf()` on `DISCONNECTED` cancels the reconnect scope.
 
 ## Client state machine
 
@@ -86,9 +88,9 @@ Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In
 
 ## Accessibility service
 
-`BarrierAccessibilityService` is a `AccessibilityService` with empty `onAccessibilityEvent` / `onInterrupt`. `onServiceConnected` publishes `instance`. The system is what starts an accessibility service; the app does not, and with the current manifest the system will not either.
+`BarrierAccessibilityService` is a `AccessibilityService` with empty `onAccessibilityEvent` / `onInterrupt`. `onServiceConnected` publishes `instance`. The manifest now declares the `android.accessibilityservice` meta-data pointing at `res/xml/accessibility_service_config.xml`, so Android should list it in Settings. The system starts it only after the user enables it; the app does not start it itself.
 
-`injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller.
+`injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer`, `injectKey`, and `injectText` are called from `MainActivity` only when a client listener fires. With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
 
 ## Tests
 

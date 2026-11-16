@@ -29,29 +29,31 @@ Covered there:
 
 Tapping **Connect**:
 
-1. Shows a toast if the accessibility service is not enabled, then continues anyway.
-2. Writes a `PendingConnection` onto `BarrierForegroundService`'s companion object.
+1. Checks whether the accessibility service is enabled. If not, shows a toast and an error line, then continues.
+2. Writes a `PendingConnection` onto `BarrierForegroundService`'s companion object, including the activity listener, clipboard handlers, and a screensaver callback.
 3. Starts `BarrierForegroundService`.
 
-`onStartCommand` reads a **different** `pendingConnection`, an instance field that nothing ever sets. The companion value is ignored. The service therefore never constructs a `BarrierClient` and never opens a socket. It only calls `startForeground` and shows the notification "Waiting for Barrier server".
+`onStartCommand` now reads the companion property (previously it read an instance field that was never set, so nothing happened). It assigns the activity listener to `connectionListener`, copies the clipboard lambdas, sets screen dimensions from display metrics, and calls `startConnection`, which builds a `SocketBarrierTransport` and a `BarrierClient` on the service scope. The client's `connect()` is launched on the service scope.
 
-The activity listener, clipboard callbacks, and accessibility instance are never attached to a running client. Input injection code is not on the path of a real session.
+So a `BarrierClient` is now constructed and its handshake coroutine runs. However, the socket it uses (`SocketBarrierTransport`) does not implement a working Barrier connection — see [Network](#network). The client will attempt `transport.connect`, which uses a reflection hack on `SSLSocketFactory` that fails on a normal Android runtime. The coroutine fails silently (no `BarrierError` is surfaced for socket failures).
+
+The status line receives `CONNECTING`, `HANDSHAKE`, and `CONNECTED` callbacks now that the listener is wired. `CONNECTING` and `HANDSHAKE` are not notified by `BarrierClient.connect()` (only `CONNECTED` is, via `handleSetOptions`), so the status jumps from `DISCONNECTED` to `CONNECTED` on a successful handshake.
 
 Tapping **Disconnect** stops the service. Leaving the activity also stops it (`onDestroy`).
 
-The status line stays `Barrier state: DISCONNECTED` unless a listener callback runs. Connect does not notify `CONNECTING` or `HANDSHAKE` to the listener, so those states are not shown during a connection attempt even after the wiring bug is fixed.
+If the client reaches `DISCONNECTED` (server close), the service's `clientListener` wrapper calls `stopSelf()`, which cancels the service scope and any pending reconnect. Reconnect does not survive in the app.
 
 ## Accessibility service
 
-The service class exists, but the manifest entry has no `android.accessibilityservice` meta-data and there is no service-config XML under `res/xml/`. Android will not list it under Settings → Accessibility, so the in-app **Open Accessibility Settings** button has nothing to enable.
+The service class exists and is now registered in the manifest with a meta-data element pointing at `res/xml/accessibility_service_config.xml`. That config enables `canRetrieveWindowContent` and `canPerformGestures`. Android should now list the service under Settings → Accessibility, and the in-app **Open Accessibility Settings** button opens the system screen.
 
-`isEnabled()` only checks `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`. With the current manifest that check stays false.
+`isEnabled()` checks `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`. It returns true only after the user toggles the service on.
 
-Even if the service were enabled, the injection methods are not a working input path:
+The injection methods are still not a working input path:
 
 - `injectPointer` ignores the motion action. Button down, button up, move, and scroll all build the same zero-duration stroke from a point to itself. `dispatchGesture` is likely to reject a 0 ms stroke. Wheel events are sent at `(0, 0)`.
 - `injectKey` compares the Barrier key id with `KeyEvent.KEYCODE_BACK`, `KEYCODE_HOME`, and `KEYCODE_APP_SWITCH`. Barrier key ids are not Android key codes, so those branches do not fire for real server traffic. The `action` argument is ignored. There is no public API in this SDK for injecting arbitrary keys.
-- `injectText` looks for a focused editable node and performs `ACTION_SET_TEXT`, which replaces the field contents. It is only called from the clipboard handler, not from key events. Window content cannot be read unless the service config sets `canRetrieveWindowContent`, which is not declared. The node walk stops at depth 8 and does not recycle nodes.
+- `injectText` looks for a focused editable node and performs `ACTION_SET_TEXT`, which replaces the field contents. It is only called from the clipboard handler, not from key events. With `canRetrieveWindowContent` now declared, `getRootInActiveWindow()` can return a tree. The node walk stops at depth 8 and does not recycle nodes.
 
 ## Network
 
@@ -61,7 +63,7 @@ The UI always asks for TLS (`useTls = true`). There is no toggle.
 
 Socket read errors are swallowed. They do not become `BarrierError.ConnectionFailed`. That error is only raised for `EBSY`, `EUNK`, and `EBAD`. A failed `connect()` in the service is not caught, so a later fix that actually calls it would still fail the coroutine quietly unless a handler is added.
 
-`screenWidth` and `screenHeight` stay 0. Nothing in the app sets them, so a `DINF` reply would advertise a 0×0 screen.
+`screenWidth` and `screenHeight` are now set from `resources.displayMetrics` in the service before connect, so `DINF` advertises the real device resolution. Previously both stayed 0.
 
 ## Options and reconnect do less than the names suggest
 
@@ -73,7 +75,7 @@ Socket read errors are swallowed. They do not become `BarrierError.ConnectionFai
 
 Clipboard grab and clipboard data ignore `clipboardSharingEnabled`. The keepalive interval stays 3000 ms and ignores `heartbeatSeconds`. `MDLT` is defined and never read. Screensaver sync only stores a boolean; it does not lock the device or dismiss a dream.
 
-`BarrierClient` can schedule reconnect after a drop from `CONNECTED`. The foreground service stops itself on every `DISCONNECTED` callback, and `onDestroy` cancels the service scope. If the service ever ran the client, that would cancel the reconnect job immediately. Reconnect is therefore not a feature of the app.
+`BarrierClient` can schedule reconnect after a drop from `CONNECTED`. The foreground service's `clientListener` wrapper calls `stopSelf()` on every `DISCONNECTED` callback, which cancels the service scope and the reconnect job. Reconnect is unit-tested but does not survive in the app. The `stopSelf`-on-disconnect and reconnect need to be reconciled before reconnect works end to end.
 
 ## Foreground service on real devices
 
