@@ -5,6 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -76,6 +80,7 @@ class BarrierForegroundService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     /**
      * Forwards client lifecycle to the hosting activity. Does not stop the
@@ -134,6 +139,29 @@ class BarrierForegroundService : Service() {
             }
         }
 
+        // Register a network callback to detect network changes and trigger
+        // a reconnect. When the network drops, close the transport so the
+        // client's reconnect loop can retry on the new network.
+        if (networkCallback == null) {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onLost(network: Network) {
+                    client?.let { c ->
+                        if (c.currentState == BarrierClientState.CONNECTED) {
+                            c.disconnect()
+                        }
+                    }
+                }
+            }
+            networkCallback = callback
+            cm.registerNetworkCallback(
+                NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build(),
+                callback,
+            )
+        }
+
         // Read the companion property the activity actually writes.
         val pending = Companion.pendingConnection
         Companion.pendingConnection = null
@@ -148,19 +176,21 @@ class BarrierForegroundService : Service() {
             val port = prefs.getString("port", null)?.toIntOrNull() ?: DEFAULT_BARRIER_PORT
             val clientName = prefs.getString("clientName", null) ?: DEFAULT_CLIENT_NAME
             if (host != null && host.isNotBlank()) {
-                val listener = connectionListener
-                if (listener != null) {
-                    val pendingConn = PendingConnection(
-                        host = host,
-                        port = port,
-                        clientName = clientName,
-                        listener = listener,
-                        onClipboardGrab = null,
-                        onClipboardData = null,
-                        onScreenSaverChanged = null,
-                    )
-                    startConnection(pendingConn)
+                val listener = connectionListener ?: object : BarrierClientListener {
+                    override fun onStateChanged(state: BarrierClientState) = Unit
+                    override fun onInputEvent(event: BarrierInputEvent) = Unit
+                    override fun onError(error: BarrierError) = Unit
                 }
+                val pendingConn = PendingConnection(
+                    host = host,
+                    port = port,
+                    clientName = clientName,
+                    listener = listener,
+                    onClipboardGrab = null,
+                    onClipboardData = null,
+                    onScreenSaverChanged = null,
+                )
+                startConnection(pendingConn)
             }
         }
         val notification = buildForegroundNotification()
@@ -183,6 +213,11 @@ class BarrierForegroundService : Service() {
         wakeLock = null
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
+        networkCallback?.let {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.unregisterNetworkCallback(it)
+        }
+        networkCallback = null
         Companion.instance = null
         super.onDestroy()
     }

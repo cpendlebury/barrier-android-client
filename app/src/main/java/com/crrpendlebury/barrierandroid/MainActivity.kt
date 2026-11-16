@@ -166,7 +166,9 @@ class MainActivity : ComponentActivity() {
         // Restore from SharedPreferences (survives process death).
         serverHostEditText.setText(prefs.getString("host", ""))
         serverPortEditText.setText(prefs.getString("port", ""))
-        clientNameEditText.setText(prefs.getString("clientName", ""))
+        val savedClientName = prefs.getString("clientName", "")
+        // Show the default if the saved value is blank, so the field is never empty.
+        clientNameEditText.setText(if (savedClientName.isNullOrBlank()) DEFAULT_CLIENT_NAME else savedClientName)
 
         // Save on every text change so settings survive even abrupt process death.
         val saveSettings = {
@@ -174,7 +176,7 @@ class MainActivity : ComponentActivity() {
                 .putString("host", serverHostEditText.text.toString())
                 .putString("port", serverPortEditText.text.toString())
                 .putString("clientName", clientNameEditText.text.toString())
-                .apply()
+                .commit()
         }
         serverHostEditText.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
