@@ -60,28 +60,79 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Asks the framework to dispatch a gesture at ([x], [y]).
+     * Tracks the last injected pointer position so relative moves and tap
+     * gestures have a sensible origin. Updated on every call.
+     */
+    private var lastX = 0f
+    private var lastY = 0f
+
+    /**
+     * Dispatches a gesture for the requested pointer action.
      *
-     * [action] is ignored. Move, down, up, and scroll all build the same
-     * stroke from the point to itself with start time 0 and duration 0.
-     * `dispatchGesture` commonly rejects a 0 ms stroke. This does not move a
-     * pointer, hold a button, or scroll. Callers in [com.crrpendlebury.barrierandroid.MainActivity]
-     * still pass a [android.view.MotionEvent] action; that argument is for a
-     * future implementation, not current behaviour.
+     * `dispatchGesture` creates discrete, fire-and-forget gestures. It cannot
+     * hold a button down across calls or track a continuous drag the way a
+     * real mouse does. What this does:
+     *
+     * - [android.view.MotionEvent.ACTION_DOWN]: a tap (0 ms stroke) at (x, y).
+     * - [android.view.MotionEvent.ACTION_UP]: a tap at the last position.
+     *   The framework has no "release held button" gesture, so this is a
+     *   best-effort tap. A real hold needs [android.view.InputManager]
+     *   injection, which is not public.
+     * - [android.view.MotionEvent.ACTION_MOVE]: a short stroke from the last
+     *   position to (x, y). Duration is [POINTER_STROKE_DURATION_MS].
+     * - [android.view.MotionEvent.ACTION_SCROLL]: a vertical swipe. x/y deltas
+     *   are not passed in (the caller only gives a point), so this swipes
+     *   down a fixed amount. A real scroll needs axis data, which
+     *   [GestureDescription] does not carry.
+     * - anything else: treated as a tap at (x, y).
+     *
+     * [action] is now consulted. Earlier versions ignored it.
      *
      * @return whatever [dispatchGesture] returns. True means the framework
-     * accepted the gesture object, not that a pointer event was delivered.
+     * accepted the gesture object, not that a pointer event was delivered to
+     * an app.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
-        val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x, y)
+        val gesture = when (action) {
+            MotionEvent.ACTION_DOWN -> tapGesture(x, y)
+            MotionEvent.ACTION_UP -> tapGesture(lastX, lastY)
+            MotionEvent.ACTION_MOVE -> strokeGesture(lastX, lastY, x, y)
+            MotionEvent.ACTION_SCROLL -> scrollGesture(x, y)
+            else -> tapGesture(x, y)
         }
-        val gestureDescription = GestureDescription.Builder()
+        lastX = x
+        lastY = y
+        return dispatchGesture(gesture, gestureResultCallback, handler)
+    }
+
+    private fun tapGesture(x: Float, y: Float): GestureDescription {
+        val path = Path().apply { moveTo(x, y) }
+        return GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, 0L))
             .setDisplayId(DISPLAY_ID)
             .build()
-        return dispatchGesture(gestureDescription, gestureResultCallback, handler)
+    }
+
+    private fun strokeGesture(fromX: Float, fromY: Float, toX: Float, toY: Float): GestureDescription {
+        val path = Path().apply {
+            moveTo(fromX, fromY)
+            lineTo(toX, toY)
+        }
+        return GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, POINTER_STROKE_DURATION_MS))
+            .setDisplayId(DISPLAY_ID)
+            .build()
+    }
+
+    private fun scrollGesture(x: Float, y: Float): GestureDescription {
+        val path = Path().apply {
+            moveTo(x, y)
+            lineTo(x, y - SCROLL_DISTANCE_PX)
+        }
+        return GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, SCROLL_STROKE_DURATION_MS))
+            .setDisplayId(DISPLAY_ID)
+            .build()
     }
 
     /**
@@ -97,6 +148,10 @@ class BarrierAccessibilityService : AccessibilityService() {
      *
      * There is no public discrete-key injection API on this compileSdk. Do not
      * add a call to `dispatchKeyEvent`; it is not on [AccessibilityService].
+     * Arbitrary key injection would require reflection on the hidden
+     * `android.hardware.input.InputManager` / `IInputManager` binder, which
+     * is version-dependent and may require system signature. This is not
+     * implemented.
      *
      * @return true only when [performGlobalAction] accepts one of the three
      * mapped codes.
@@ -123,10 +178,12 @@ class BarrierAccessibilityService : AccessibilityService() {
      * Replaces the text of the focused editable node with [text].
      *
      * This is not keystroke injection. `ACTION_SET_TEXT` sets the field
-     * contents. It is only useful after a clipboard payload, which is the only
-     * caller. It requires `getRootInActiveWindow()` to return a tree, which
-     * requires `canRetrieveWindowContent` in the service config that this
-     * manifest does not declare.
+     * contents. There is no public "insert text at cursor" action, so
+     * appending requires reading the current text, concatenating, and
+     * setting the whole string. This method does not append; it replaces.
+     * It is only useful after a clipboard payload, which is the only caller.
+     * It requires `getRootInActiveWindow()` to return a tree, which requires
+     * `canRetrieveWindowContent` in the service config (now declared).
      *
      * The walk stops at depth [MAX_EDITABLE_NODE_SEARCH_DEPTH] and does not
      * recycle [AccessibilityNodeInfo] instances. A match must be both
@@ -167,6 +224,9 @@ class BarrierAccessibilityService : AccessibilityService() {
     companion object {
         private const val DISPLAY_ID = 0
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
+        private const val POINTER_STROKE_DURATION_MS = 50L
+        private const val SCROLL_STROKE_DURATION_MS = 100L
+        private const val SCROLL_DISTANCE_PX = 200f
 
         var instance: BarrierAccessibilityService? = null
             private set

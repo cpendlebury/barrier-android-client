@@ -35,6 +35,14 @@ interface BarrierTransport {
 
     /** Invoked with each packet received from the server. */
     var onPacket: ((BarrierPacket) -> Unit)?
+
+    /**
+     * Invoked when the read loop exits without an explicit [close]. The
+     * implementation must not call this after [close] has been called. The
+     * client uses it to run [BarrierClient.closeTransport] without waiting
+     * for the keepalive watchdog.
+     */
+    var onConnectionLost: (() -> Unit)?
 }
 
 enum class TransportState {

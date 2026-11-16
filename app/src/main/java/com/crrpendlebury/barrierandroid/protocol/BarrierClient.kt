@@ -592,9 +592,16 @@ class BarrierClient(
 
     private suspend fun performConnect(serverHost: String, serverPort: Int, useTls: Boolean) {
         transport.onPacket = { packet -> scope.launch { handlePacket(packet) } }
+        transport.onConnectionLost = { scope.launch { closeTransport() } }
         state = BarrierClientState.CONNECTING
-        transport.connect(serverHost, serverPort, useTls)
-        send(BarrierPacket.Hello(PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION))
-        state = BarrierClientState.HANDSHAKE
+        try {
+            transport.connect(serverHost, serverPort, useTls)
+            send(BarrierPacket.Hello(PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION))
+            state = BarrierClientState.HANDSHAKE
+        } catch (e: Exception) {
+            notifyError(BarrierError.ConnectionFailed(e.message ?: "connection failed"))
+            closeTransport()
+            throw e
+        }
     }
 }

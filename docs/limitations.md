@@ -49,11 +49,11 @@ The service class exists and is now registered in the manifest with a meta-data 
 
 `isEnabled()` checks `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`. It returns true only after the user toggles the service on.
 
-The injection methods are still not a working input path:
+The injection methods are still not a working input path, but they are less wrong than before:
 
-- `injectPointer` ignores the motion action. Button down, button up, move, and scroll all build the same zero-duration stroke from a point to itself. `dispatchGesture` is likely to reject a 0 ms stroke. Wheel events are sent at `(0, 0)`.
-- `injectKey` compares the Barrier key id with `KeyEvent.KEYCODE_BACK`, `KEYCODE_HOME`, and `KEYCODE_APP_SWITCH`. Barrier key ids are not Android key codes, so those branches do not fire for real server traffic. The `action` argument is ignored. There is no public API in this SDK for injecting arbitrary keys.
-- `injectText` looks for a focused editable node and performs `ACTION_SET_TEXT`, which replaces the field contents. It is only called from the clipboard handler, not from key events. With `canRetrieveWindowContent` now declared, `getRootInActiveWindow()` can return a tree. The node walk stops at depth 8 and does not recycle nodes.
+- `injectPointer` now consults the motion action. `ACTION_DOWN` is a tap at (x, y). `ACTION_UP` is a tap at the last position. `ACTION_MOVE` is a short stroke (50 ms) from the last position to (x, y). `ACTION_SCROLL` is a downward swipe of 200 px over 100 ms. `dispatchGesture` still creates discrete, fire-and-forget gestures; it cannot hold a button down or track a continuous drag the way a real mouse does. Scroll has no axis data (the caller passes a point, not deltas). Wheel events from the server (`MouseWheelPacket`) are sent as `ACTION_SCROLL` at `(0, 0)` by `MainActivity`, so scroll direction and amount are lost.
+- `injectKey` compares the Barrier key id with `KeyEvent.KEYCODE_BACK`, `KEYCODE_HOME`, and `KeyEvent.KEYCODE_APP_SWITCH`. Barrier key ids are not Android key codes, so those branches do not fire for real server traffic. The `action` argument is ignored: down, repeat, and up would fire the same global action if a code ever matched. There is no public discrete-key injection API on this compileSdk. Arbitrary key injection would require reflection on the hidden `InputManager` / `IInputManager` binder, which is not implemented.
+- `injectText` looks for a focused editable node and performs `ACTION_SET_TEXT`, which replaces the field contents. There is no public "insert text at cursor" action, so appending would require reading the current text, concatenating, and setting the whole string — this method does not do that. It is only called from the clipboard handler, not from key events. With `canRetrieveWindowContent` now declared, `getRootInActiveWindow()` can return a tree. The node walk stops at depth 8 and does not recycle nodes.
 
 ## Network
 

@@ -25,6 +25,8 @@ class FakeBarrierTransport : BarrierTransport {
 
     override var onPacket: ((BarrierPacket) -> Unit)? = null
 
+    override var onConnectionLost: (() -> Unit)? = null
+
     private val mutex = kotlinx.coroutines.sync.Mutex()
 
     val sentPackets = mutableListOf<BarrierPacket>()

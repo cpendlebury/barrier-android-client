@@ -3,11 +3,11 @@
   Barrier Android client. The computer runs the Barrier server. This app is
   the phone-side client. It does not share the phone's keyboard upstream.
 
-  Accessibility service: the intent-filter and bind permission are not enough.
-  Android also requires a meta-data element named android.accessibilityservice
-  pointing at an XML resource with canRetrieveWindowContent and the other
-  flags. That resource does not exist. The service will not appear in
-  Settings until it is added. Do not document the current entry as user-enableable.
+  Accessibility service: now registered with meta-data pointing at
+  res/xml/accessibility_service_config.xml (canRetrieveWindowContent and
+  canPerformGestures enabled). The service should now appear in
+  Settings → Accessibility. isEnabled() checks secure settings; it still
+  returns false until the user toggles it on.
 
   Foreground service: type specialUse without a PROPERTY_SPECIAL_USE_FGS_SUBTYPE
   property. Android 14+ can reject the start. The service also calls APIs
@@ -47,6 +47,9 @@
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
         <service
             android:name=".BarrierForegroundService"

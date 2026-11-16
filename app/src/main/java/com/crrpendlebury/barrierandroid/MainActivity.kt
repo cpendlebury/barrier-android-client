@@ -194,6 +194,11 @@ class MainActivity : ComponentActivity() {
             listener = barrierClientListener,
             onClipboardGrab = { clipboardId, seq -> readClipboardBytes() },
             onClipboardData = { packet -> handleClipboardData(packet) },
+            onScreenSaverChanged = { started ->
+                runOnUiThread {
+                    statusTextView.text = "Barrier state: ${if (started) "screensaver on" else "screensaver off"}"
+                }
+            },
         )
         runCatching { startService(Intent(this, BarrierForegroundService::class.java)) }
     }

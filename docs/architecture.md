@@ -66,7 +66,7 @@ Barrier server
 Breaks on that path, in order:
 
 1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` with a trust-all `TrustManager` for TLS. `connect()` no longer double-connects. TLS is still not Barrier's fingerprint-verified TLS. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
-2. The accessibility service is now declared with meta-data, but `injectPointer` / `injectKey` / `injectText` do not implement the events they claim to. See [limitations](limitations.md).
+2. The accessibility service is now declared with meta-data. `injectPointer` now consults the motion action (tap, stroke, scroll) but `dispatchGesture` creates discrete gestures, not continuous pointer tracking. `injectKey` still does not match real server key ids. `injectText` replaces field contents. See [limitations](limitations.md).
 3. The service's `stopSelf()` on `DISCONNECTED` cancels the reconnect scope.
 
 ## Client state machine

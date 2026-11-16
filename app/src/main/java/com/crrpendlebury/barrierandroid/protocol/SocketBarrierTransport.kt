@@ -3,39 +3,31 @@ package com.crrpendlebury.barrierandroid.protocol
 import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * Socket transport. Not a working Barrier connection.
+ * TCP transport implementing [BarrierTransport].
  *
- * Known defects, left in place and commented so they are not "cleaned up"
- * into a different bug:
+ * Plain and TLS are both supported. TLS uses a trust-all [javax.net.ssl.TrustManager]
+ * and disables hostname verification, which is what Barrier needs for its
+ * self-signed server certificate on a LAN. This is not secure against a MITM
+ * on an untrusted network; a future version should verify the server fingerprint
+ * the way Barrier's GUI does.
  *
- * - [createSocket] never constructs a plain [java.net.Socket]. Both branches
- *   use [javax.net.ssl.SSLSocketFactory]. The comment inside the catch block
- *   that says "fall back to plaintext" is wrong; the fallback is still an
- *   SSL socket from the default [javax.net.ssl.SSLContext].
- * - The reflected method `SSLSocketFactory.createSSLSocket(String, int)` is
- *   not a platform API. The reflection fails, so the try branch never
- *   succeeds on a normal Android runtime. Barrier's own TLS (fingerprint
- *   pinning of a self-signed certificate) is not implemented either.
- * - [javax.net.ssl.SSLSocketFactory.createSocket] with a host and port already
- *   connects. [connect] then calls [java.net.Socket.connect] again on that
- *   socket.
- * - [connect]'s `useTls` parameter is ignored. [createSocket] reads the
- *   constructor property of the same name. Callers that pass a different
- *   value, including [BarrierClient.performConnect], do not change the socket.
- * - The read loop returns on unknown packets and on I/O errors without
- *   closing the socket and without notifying [BarrierClient]. The client
- *   watchdog may eventually drop the session; it is not told immediately.
- * - [connect] returns immediately if [state] is not [TransportState.DISCONNECTED].
- *   A second connect on a live transport is a silent no-op, which will stall
- *   a reconnect that forgot to [close] first. [close] does reset the state.
+ * The constructor's `host`, `port`, and `useTls` are retained for backward
+ * compatibility. [connect] uses its own `useTls` argument and ignores the
+ * constructor flag. [connect] also takes `host` and `port` arguments and
+ * ignores the constructor copies. The constructor copies exist only because
+ * [BarrierForegroundService] passes them; they are not read.
  */
 class SocketBarrierTransport(
     private val host: String,
@@ -43,6 +35,7 @@ class SocketBarrierTransport(
     private val useTls: Boolean,
     private val scope: CoroutineScope,
     override var onPacket: ((BarrierPacket) -> Unit)? = null,
+    override var onConnectionLost: (() -> Unit)? = null,
 ) : BarrierTransport {
 
     override var state: TransportState = TransportState.DISCONNECTED
@@ -57,11 +50,11 @@ class SocketBarrierTransport(
         if (state != TransportState.DISCONNECTED) {
             return
         }
-        // `useTls` is intentionally unread. createSocket() uses the constructor
-        // flag. See the class KDoc before "fixing" this by threading the
-        // parameter through without also replacing the SSL factory hack.
-        val newSocket = createSocket()
+        val newSocket = createSocket(host, useTls)
         newSocket.connect(InetSocketAddress(host, port))
+        if (useTls) {
+            (newSocket as SSLSocket).startHandshake()
+        }
         socket = newSocket
         state = TransportState.CONNECTED
         closed = false
@@ -86,28 +79,21 @@ class SocketBarrierTransport(
     }
 
     /**
-     * Builds the socket [connect] will use.
-     *
-     * Does not honour a plaintext request. See the class KDoc. The catch block
-     * is the path that actually runs, because `createSSLSocket` is not on
-     * [SSLSocketFactory].
+     * Builds an unconnected socket. Plain for `useTls == false`, an
+     * unconnected [SSLSocket] with hostname verification disabled for
+     * `useTls == true`. The socket is connected by [connect] afterwards.
      */
-    private fun createSocket(): Socket {
-        val factory = SSLContext.getDefault().socketFactory
-        if (useTls) {
-            return try {
-                val createTlsSocket = SSLSocketFactory::class.java.getMethod(
-                    "createSSLSocket",
-                    String::class.java,
-                    Int::class.java,
-                )
-                createTlsSocket.invoke(factory, host, port) as SSLSocket
-            } catch (e: Exception) {
-                // TLS expected but unavailable: fall back to plaintext.
-                factory.createSocket(host, port)
-            }
+    private fun createSocket(host: String, useTls: Boolean): Socket {
+        if (!useTls) {
+            return Socket()
         }
-        return factory.createSocket(host, port)
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, trustAllCerts, SecureRandom())
+        val sslSocket = sslContext.socketFactory.createSocket() as SSLSocket
+        sslSocket.sslParameters = SSLParameters().apply {
+            endpointIdentificationAlgorithm = null
+        }
+        return sslSocket
     }
 
     private suspend fun readPackets(socket: Socket) {
@@ -139,7 +125,13 @@ class SocketBarrierTransport(
                 onPacket?.invoke(packet)
             }
         } catch (e: Exception) {
-            // Socket read failure or cancellation: drop the connection quietly.
+            // Socket read failure or cancellation. Swallowed here; the client
+            // learns about it through onConnectionLost below.
+        }
+        // Notify only when we did not close explicitly. close() sets
+        // closed = true before cancelling this job.
+        if (!closed) {
+            onConnectionLost?.invoke()
         }
     }
 
@@ -153,5 +145,13 @@ class SocketBarrierTransport(
             offset += read
         }
         return true
+    }
+
+    companion object {
+        private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        })
     }
 }

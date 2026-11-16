@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration for BarrierAccessibilityService.
+
+  canRetrieveWindowContent is required for getRootInActiveWindow() to return a
+  tree, which injectText needs. Without it, ACTION_SET_TEXT cannot find a
+  focused editable node.
+  capabilityCanPerformGestures is required for dispatchGesture.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/app_name" />

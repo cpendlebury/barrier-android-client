@@ -31,13 +31,20 @@ import kotlinx.coroutines.launch
  * a keyboard for the computer. The service exists so a future working session
  * can outlive the activity. It does not do that today.
  *
- * Wiring defect: [MainActivity] assigns [Companion.pendingConnection].
- * [onStartCommand] reads the instance property [pendingConnection], which
- * nothing ever sets. The names match. The receivers do not. [startConnection]
- * is therefore dead, and [connectionListener] is never assigned, so even a
- * one-line fix that reads the companion must also copy
- * [PendingConnection.listener] onto [connectionListener] or input events are
- * still dropped. Clipboard lambdas are copied only inside [startConnection].
+ * Wiring: [MainActivity] assigns [Companion.pendingConnection]. [onStartCommand]
+ * reads that companion property and copies [PendingConnection.listener] onto
+ * [connectionListener]. [startConnection] builds the [BarrierClient] with the
+ * internal [clientListener] wrapper (which forwards to [connectionListener]
+ * and calls `stopSelf()` on [BarrierClientState.DISCONNECTED]) and copies the
+ * clipboard lambdas from the pending connection. The client now actually starts.
+ *
+ * Remaining caveat: [clientListener] calls `stopSelf()` on every
+ * [BarrierClientState.DISCONNECTED], including the transient state published
+ * by [BarrierClient.closeTransport] before it schedules a reconnect. With the
+ * service alive, that cancels [serviceScope] and the reconnect job. Reconnect
+ * only survives if the listener does not stop the service, or if the service
+ * is not the reconnect owner. This is tracked as a known limitation, not
+ * fixed here.
  *
  * [clientListener] calls `stopSelf()` on every [BarrierClientState.DISCONNECTED].
  * [BarrierClient.closeTransport] notifies that state before it schedules
@@ -87,17 +94,15 @@ class BarrierForegroundService : Service() {
     var onClipboardGrab: ((clipboardId: Int, seq: Int) -> ByteArray?)? = null
         private set
 
-    private var pendingConnection: PendingConnection? = null
-
     override fun onCreate() = super.onCreate()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Instance field, not Companion.pendingConnection. See the class KDoc.
-        // Do not delete this read as "unused" without switching it to the
-        // companion property the activity actually writes.
-        val pending = pendingConnection
-        pendingConnection = null
+        // Read the companion property the activity actually writes. The
+        // instance field of the same name was never assigned and is removed.
+        val pending = Companion.pendingConnection
+        Companion.pendingConnection = null
         if (pending != null) {
+            connectionListener = pending.listener
             startConnection(pending)
         }
         startForeground(
@@ -137,14 +142,22 @@ class BarrierForegroundService : Service() {
         ).also { newClient ->
             newClient.onClipboardGrab = pending.onClipboardGrab
             newClient.onClipboardData = pending.onClipboardData
+            newClient.onScreenSaverChanged = pending.onScreenSaverChanged
+            // Advertise the device screen size so the server knows the
+            // geometry. Previously both stayed 0 and DINF reported 0x0.
+            val metrics = resources.displayMetrics
+            newClient.screenWidth = metrics.widthPixels
+            newClient.screenHeight = metrics.heightPixels
         }
         client = newClient
         serviceScope.launch {
-            newClient.connect(
-                serverHost = pending.host,
-                serverPort = pending.port,
-                useTls = true,
-            )
+            runCatching {
+                newClient.connect(
+                    serverHost = pending.host,
+                    serverPort = pending.port,
+                    useTls = true,
+                )
+            }
         }
     }
 
@@ -167,11 +180,9 @@ class BarrierForegroundService : Service() {
     /**
      * Connection request the activity builds.
      *
-     * [listener] is the activity's [BarrierClientListener]. [startConnection]
-     * does not pass it to [BarrierClient]; it passes [clientListener] and
-     * expects [connectionListener] to have been set to this listener. Nothing
-     * sets [connectionListener]. A fix has to do both: read this object from
-     * the companion, and assign [connectionListener] from [listener].
+     * [listener] is the activity's [BarrierClientListener]. It is assigned to
+     * [connectionListener] in [onStartCommand] so the internal [clientListener]
+     * wrapper can forward state, input, and errors back to the activity.
      */
     data class PendingConnection(
         val host: String,
@@ -180,6 +191,7 @@ class BarrierForegroundService : Service() {
         val listener: BarrierClientListener,
         val onClipboardGrab: ((clipboardId: Int, seq: Int) -> ByteArray?)?,
         val onClipboardData: ((clipboardData: BarrierPacket.ClipboardDataPacket) -> Unit)?,
+        val onScreenSaverChanged: ((started: Boolean) -> Unit)? = null,
     )
 
     companion object {
@@ -189,11 +201,9 @@ class BarrierForegroundService : Service() {
         /**
          * Set by [MainActivity] immediately before [startService].
          *
-         * Not read by [onStartCommand]. That method has an instance property
-         * of the same name. This is the live hand-off slot; the instance
-         * property is the one the service looks at. Both must be reconciled
-         * before a session can start. `@Volatile` matters only after something
-         * reads this field from another thread.
+         * Read by [onStartCommand]. `@Volatile` matters because the activity
+         * writes from the UI thread and the service reads on the main thread
+         * of the service process (same process here, but still cross-thread).
          */
         @Volatile
         var pendingConnection: PendingConnection? = null
