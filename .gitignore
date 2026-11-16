@@ -1,0 +1,23 @@
+# Built artifacts
+/build/
+**/build/
+.cxx/
+.externalNativeBuild/
+captures/
+
+# Gradle
+.gradle/
+**/.gradle/
+
+# Local configuration
+local.properties
+*.iml
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+*.log
+
+# Kotlin
+.kotlin/

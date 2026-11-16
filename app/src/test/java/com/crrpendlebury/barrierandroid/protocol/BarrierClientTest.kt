@@ -1,0 +1,170 @@
+package com.crrpendlebury.barrierandroid.protocol
+
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class BarrierClientTest {
+
+    private val testScope = TestScope()
+
+    @Test
+    fun `client completes handshake with server`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+
+        // Client hello sent, waiting for server hello.
+        assertEquals(BarrierClientState.HANDSHAKE, client.currentState)
+        assertTrue(transport.sentPackets.any { it is BarrierPacket.Hello })
+
+        // Server hello -> client hello back.
+        transport.emit(BarrierPacket.Hello(versionMajor = 1, versionMinor = 6))
+        runCurrent()
+        advanceUntilIdle()
+        assertTrue(transport.sentPackets.any { it is BarrierPacket.HelloBack })
+
+        // Server query info -> client screen info -> server info ack -> server options.
+        transport.emit(BarrierPacket.QueryInfoPacket())
+        runCurrent()
+        advanceUntilIdle()
+        val screenInfo = transport.sentPackets.filterIsInstance<BarrierPacket.ScreenInfoPacket>().single()
+        assertEquals(0, screenInfo.xOrigin)
+        assertEquals(0, screenInfo.yOrigin)
+        assertEquals(0, screenInfo.width)
+        assertEquals(0, screenInfo.height)
+
+        transport.emit(BarrierPacket.InfoAcknowledgedPacket())
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(BarrierClientState.CONNECTED, client.currentState)
+    }
+
+    @Test
+    fun `client delivers key events to listener`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val inputEvents = mutableListOf<BarrierInputEvent>()
+        val listener = object : BarrierClientListener {
+            override fun onStateChanged(state: BarrierClientState) = Unit
+            override fun onInputEvent(event: BarrierInputEvent) {
+                inputEvents.add(event)
+            }
+            override fun onError(error: BarrierError) = Unit
+        }
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(BarrierPacket.KeyDownPacket(keyId = 38, modifierMask = 1, button = 66))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf<BarrierInputEvent>(BarrierInputEvent.KeyDown(keyId = 38, modifierMask = 1, button = 66)), inputEvents)
+        // Client acks server input with CNOP.
+        assertTrue(transport.sentPackets.any { it is BarrierPacket.NoOpPacket })
+    }
+
+    @Test
+    fun `client replies to keepalive`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+        assertEquals(BarrierClientState.CONNECTED, client.currentState)
+
+        transport.emit(BarrierPacket.KeepAlivePacket())
+        runCurrent()
+        advanceUntilIdle()
+
+        assertTrue(transport.sentPackets.any { it is BarrierPacket.KeepAlivePacket })
+    }
+
+    @Test
+    fun `client disconnects on server close`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val states = mutableListOf<BarrierClientState>()
+        val listener = object : BarrierClientListener {
+            override fun onStateChanged(state: BarrierClientState) { states.add(state) }
+            override fun onInputEvent(event: BarrierInputEvent) = Unit
+            override fun onError(error: BarrierError) = Unit
+        }
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(BarrierPacket.ClosePacket())
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(BarrierClientState.DISCONNECTED, client.currentState)
+        assertEquals(listOf(BarrierClientState.CONNECTED, BarrierClientState.DISCONNECTED), states)
+    }
+
+    @Test
+    fun `client reports incompatible server version`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val errors = mutableListOf<BarrierError>()
+        val listener = object : BarrierClientListener {
+            override fun onStateChanged(state: BarrierClientState) = Unit
+            override fun onInputEvent(event: BarrierInputEvent) = Unit
+            override fun onError(error: BarrierError) { errors.add(error) }
+        }
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.Hello(versionMajor = 2, versionMinor = 0))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf<BarrierError>(BarrierError.IncompatibleVersion(serverMajorVersion = 2, serverMinorVersion = 0)), errors)
+        assertEquals(BarrierClientState.DISCONNECTED, client.currentState)
+    }
+
+    @Test
+    fun `client replies to clipboard grab with data`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        transport.emit(BarrierPacket.ClipboardGrabPacket(clipboardId = 0, seq = 5))
+        runCurrent()
+        advanceUntilIdle()
+
+        val dclp = transport.sentPackets.filterIsInstance<BarrierPacket.ClipboardDataPacket>().single()
+        assertEquals(0, dclp.clipboardId)
+        assertEquals(5, dclp.seq)
+    }
+}
