@@ -86,16 +86,6 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var cursorView: CursorOverlayView? = null
 
     /**
-     * Window context used to host the cursor overlay. Created via
-     * [createWindowContext] with type [WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY];
-     * the framework installs the accessibility overlay window token on the
-     * WindowManager obtained through such a context, so an overlay window added
-     * through it can be displayed. A WindowManager obtained from the plain
-     * service context carries no overlay token and cannot host the overlay.
-     */
-    private var cursorWindowContext: Context? = null
-
-    /**
      * Tracks the last injected pointer position so relative moves and tap
      * gestures have a sensible origin. Updated on every call.
      */
@@ -290,13 +280,8 @@ class BarrierAccessibilityService : AccessibilityService() {
      *
      * Runs on the main thread via the service handler, because
      * [android.view.WindowManager.addView] must be called on the main thread.
-     * The overlay window is added through a window context created via
-     * [createWindowContext] with type [WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY];
-     * that context is wrapped in the accessibility window context which installs
-     * the accessibility overlay window token, which a WindowManager obtained
-     * from the plain service context does not carry. If an overlay is already
-     * attached it is repositioned; otherwise one is created. Safe to call when
-     * no overlay exists or the service is not bound.
+     * If an overlay is already attached it is repositioned; otherwise one is
+     * created. Safe to call when no overlay exists or the service is not bound.
      */
     fun showCursor(x: Float, y: Float) {
         handler.post {
@@ -351,18 +336,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         if (existing != null) {
             return existing
         }
-        // The cursor overlay window must be added through a window context
-        // created with createWindowContext(..., TYPE_ACCESSIBILITY_OVERLAY, ...).
-        // The framework installs the accessibility overlay window token on the
-        // WindowManager obtained through such a context; a WindowManager obtained
-        // from the plain service context carries no overlay token, and the
-        // overlay window cannot be displayed through it.
-        val context = cursorWindowContext
-            ?: createWindowContext(
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                null,
-            ).also { cursorWindowContext = it }
-        val created = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val created = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         windowManager = created
         return created
     }
