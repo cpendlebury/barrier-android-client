@@ -8,7 +8,7 @@
 ## Current phase status
 - Phase 1 (client protocol core) — **COMPLETE AND GREEN**.
 - Phase 2 (Accessibility Service injection + clipboard + foreground service) — **SUBSTANTIALLY COMPLETE**. Connection handshake works on real device. Input injection partially functional (gestures, not real pointer events).
-- Phase 3 (hardening) — **IN PROGRESS**: reconnect, screensaver/options, UI wiring, wake lock, battery optimization, background survival, settings persistence, network change detection all implemented; **visible pointer cursor overlay implemented** via accessibility-hosted translucent window drawing a standard arrow (Red Moon pattern).
+- Phase 3 (hardening) — **IN PROGRESS**: reconnect, screensaver/options, UI wiring, wake lock, battery optimization, background survival, settings persistence, network change detection all implemented; **visible pointer cursor overlay implemented** via accessibility-hosted translucent window drawing a standard arrow (Red Moon pattern); **instant-crash-on-connect fixed** (added missing `ACCESS_NETWORK_STATE` permission for the network callback); **in-app debug log sink added** (`barrier_debug.log` in external files dir; cursor lifecycle + inject logging; cursor overlay show lifecycle log entries added in `showCursor`).
 
 ## Implemented (Phase 1)
 - Protocol layer (`app/src/main/java/com/crrpendlebury/barrierandroid/protocol/`): BarrierClient, BarrierPacket, PacketCodec, BarrierTransport, SocketBarrierTransport, BarrierModels, BarrierCommand, BarrierConstants.
@@ -65,6 +65,7 @@
 - Kotlin nested-class instantiation requires parens: `BarrierPacket.KeepAlivePacket()`, etc.
 - **Framework API finding**: public AccessibilityService dispatch surface in compileSdk 35 exposes only dispatchGesture and performGlobalAction. dispatchKeyEvent does not exist → discrete key injection not possible; global actions for back/home/recents only.
 - **Pointer injection**: dispatchGesture creates discrete gestures, not continuous pointer tracking. Visible cursor now rendered via accessibility-hosted overlay (standard arrow); injection still discrete. Throttled to reduce phantom keystrokes.
+- **Cursor visibility (current debugging)**: overlay implementation landed (commits `2f51539` → `13e08c7` → `446cada` → `515cfbf`), but the cursor did **not** appear on device even though injection works (debug log shows `injectPointer ACTION_MOVE` firing). In-app log sink added (`barrier_debug.log`, external files dir) + show lifecycle logging (`cursor overlay show` at runnable start and after position update). Awaits: reinstall latest APK, move mouse during connected session, read `barrier_debug.log`, confirm show-path execution and overlay add/draw.
 - **Text injection**: ACTION_SET_TEXT replaces field contents (no append). Only fires from clipboard path.
 - **Options**: CLPS and HART now applied; MDLT and SSVR stored but not acted upon.
 - **File transfer / drag**: DFTR/DDRG decoded and ignored.
@@ -73,7 +74,7 @@
 - **Git email**: chris@christopherpendlebury.com (verified on GitHub).
 
 ## Immediate next steps
-1. On-device validation: test connection, injection, clipboard, screensaver, options, reconnect, background survival on a real device with a real Barrier server. The visible cursor overlay now needs real-device validation (movement shows/moves cursor, button hold/release, disconnect/screensaver hide).
+1. On-device validation: test connection, injection, clipboard, screensaver, options, reconnect, background survival on a real device with a real Barrier server. The visible cursor overlay now needs real-device validation (movement shows/moves cursor, button hold/release, disconnect/screensaver hide). Current blocker: cursor not visible despite working injection; using in-app `barrier_debug.log` (`Android/data/com.crrpendlebury.barrierandroid/files/barrier_debug.log`) to trace the overlay show path.
 2. Remaining key injection: arbitrary keycodes require hidden InputManager reflection — evaluate feasibility.
 3. File transfer/drag info handling (deferred stubs).
 4. UI improvements: update notification text with connection state, add plaintext TLS toggle.
