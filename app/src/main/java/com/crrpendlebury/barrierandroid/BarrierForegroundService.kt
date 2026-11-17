@@ -98,6 +98,10 @@ class BarrierForegroundService : Service() {
             // input re-shows the cursor.
             if (state == BarrierClientState.DISCONNECTED) {
                 BarrierAccessibilityService.instance?.hideCursor()
+                BarrierAccessibilityService.log(
+                    this@BarrierForegroundService,
+                    "client state disconnected; hiding cursor",
+                )
             }
             connectionListener?.onStateChanged(state)
         }
@@ -128,6 +132,8 @@ class BarrierForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        BarrierAccessibilityService.log(this, "foreground service onStartCommand")
+
         // Acquire a partial wake lock so the CPU stays awake for keepalive
         // and socket reads while the screen is off. Released in onDestroy.
         if (wakeLock == null) {
@@ -257,6 +263,10 @@ class BarrierForegroundService : Service() {
                 pending.onScreenSaverChanged?.invoke(started)
                 if (started) {
                     BarrierAccessibilityService.instance?.hideCursor()
+                    BarrierAccessibilityService.log(
+                        this@BarrierForegroundService,
+                        "screensaver started; hiding cursor",
+                    )
                 }
             }
             // Advertise the device screen size so the server knows the

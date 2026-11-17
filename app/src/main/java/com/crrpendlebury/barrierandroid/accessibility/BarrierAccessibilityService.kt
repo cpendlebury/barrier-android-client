@@ -22,6 +22,8 @@ import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Accessibility service that is supposed to apply Barrier input on the phone.
@@ -177,10 +179,24 @@ class BarrierAccessibilityService : AccessibilityService() {
         // the cursor; button-up hides it. Movement is suppressed by
         // [mouseMovementEnabled], in which case only button actions act.
         when (action) {
-            MotionEvent.ACTION_DOWN -> showCursor(x, y)
-            MotionEvent.ACTION_MOVE -> if (mouseMovementEnabled) showCursor(x, y)
-            MotionEvent.ACTION_SCROLL -> showCursor(x, y)
-            MotionEvent.ACTION_UP -> hideCursor()
+            MotionEvent.ACTION_DOWN -> {
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_DOWN x=$x y=$y")
+                showCursor(x, y)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (mouseMovementEnabled) {
+                    BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE x=$x y=$y")
+                    showCursor(x, y)
+                }
+            }
+            MotionEvent.ACTION_SCROLL -> {
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_SCROLL x=$x y=$y")
+                showCursor(x, y)
+            }
+            MotionEvent.ACTION_UP -> {
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP")
+                hideCursor()
+            }
             else -> Unit
         }
         return dispatched
@@ -278,6 +294,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 cursorView = overlay
             }
             cursorView?.updatePosition(x, y)
+            BarrierAccessibilityService.log(this, "cursor overlay show x=$x y=$y")
         }
     }
 
@@ -295,6 +312,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 runCatching { wm.removeView(view) }
             }
             cursorView = null
+            BarrierAccessibilityService.log(this, "cursor overlay hide")
         }
     }
 
@@ -431,6 +449,26 @@ class BarrierAccessibilityService : AccessibilityService() {
         private val cursorPaint = Paint().apply {
             isAntiAlias = true
             color = Color.BLACK
+        }
+
+        private const val LOG_FILE_NAME = "barrier_debug.log"
+
+        /**
+         * Appends one timestamped line to the in-app debug log file. The file
+         * lives in the app's external files directory so it can be read without
+         * adb. A write failure is swallowed because the debug sink must never
+         * take down the pointer injection path.
+         */
+        fun log(context: Context, message: String) {
+            try {
+                val dir = context.getExternalFilesDir(null) ?: return
+                val file = File(dir, LOG_FILE_NAME)
+                FileOutputStream(file, true).use { stream ->
+                    stream.write(("$message\n").toByteArray(Charsets.UTF_8))
+                }
+            } catch (t: Throwable) {
+                // Debug sink only: a log write failure must not interrupt input.
+            }
         }
 
         var instance: BarrierAccessibilityService? = null
