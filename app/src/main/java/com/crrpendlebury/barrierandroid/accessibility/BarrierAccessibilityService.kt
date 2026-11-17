@@ -285,6 +285,7 @@ class BarrierAccessibilityService : AccessibilityService() {
      */
     fun showCursor(x: Float, y: Float) {
         handler.post {
+            BarrierAccessibilityService.log(this, "cursor overlay show x=$x y=$y")
             val wm = resolveWindowManager()
             val view = cursorView
             if (view == null) {
