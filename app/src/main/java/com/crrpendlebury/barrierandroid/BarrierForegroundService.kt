@@ -18,6 +18,7 @@ import android.os.Looper
 import android.net.wifi.WifiManager
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService
 import com.crrpendlebury.barrierandroid.protocol.BarrierClient
 import com.crrpendlebury.barrierandroid.protocol.BarrierError
 import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
@@ -91,6 +92,13 @@ class BarrierForegroundService : Service() {
      */
     private val clientListener = object : BarrierClientListener {
         override fun onStateChanged(state: BarrierClientState) {
+            // The cursor is a render surface for injected input; once the client
+            // is gone there is nothing to mirror. DISCONNECTED is transient here
+            // (the client schedules a reconnect after notifying), and any new
+            // input re-shows the cursor.
+            if (state == BarrierClientState.DISCONNECTED) {
+                BarrierAccessibilityService.instance?.hideCursor()
+            }
             connectionListener?.onStateChanged(state)
         }
 
@@ -245,7 +253,12 @@ class BarrierForegroundService : Service() {
         ).also { newClient ->
             newClient.onClipboardGrab = pending.onClipboardGrab
             newClient.onClipboardData = pending.onClipboardData
-            newClient.onScreenSaverChanged = pending.onScreenSaverChanged
+            newClient.onScreenSaverChanged = { started ->
+                pending.onScreenSaverChanged?.invoke(started)
+                if (started) {
+                    BarrierAccessibilityService.instance?.hideCursor()
+                }
+            }
             // Advertise the device screen size so the server knows the
             // geometry. Previously both stayed 0 and DINF reported 0x0.
             val metrics = resources.displayMetrics

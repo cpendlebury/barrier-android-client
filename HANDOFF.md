@@ -8,7 +8,7 @@
 ## Current phase status
 - Phase 1 (client protocol core) — **COMPLETE AND GREEN**.
 - Phase 2 (Accessibility Service injection + clipboard + foreground service) — **SUBSTANTIALLY COMPLETE**. Connection handshake works on real device. Input injection partially functional (gestures, not real pointer events).
-- Phase 3 (hardening) — **IN PROGRESS**: reconnect, screensaver/options, UI wiring, wake lock, battery optimization, background survival, settings persistence, network change detection all implemented.
+- Phase 3 (hardening) — **IN PROGRESS**: reconnect, screensaver/options, UI wiring, wake lock, battery optimization, background survival, settings persistence, network change detection all implemented; **visible pointer cursor overlay implemented** via accessibility-hosted translucent window drawing a standard arrow (Red Moon pattern).
 
 ## Implemented (Phase 1)
 - Protocol layer (`app/src/main/java/com/crrpendlebury/barrierandroid/protocol/`): BarrierClient, BarrierPacket, PacketCodec, BarrierTransport, SocketBarrierTransport, BarrierModels, BarrierCommand, BarrierConstants.
@@ -21,6 +21,8 @@
 3. **Key injection** (`BarrierAccessibilityService.kt`): injectKey maps KEYCODE_BACK/HOME/APP_SWITCH → global actions; injectGlobalAction via performGlobalAction. Arbitrary keys deferred (no public API).
 4. **Text injection**: injectText via ACTION_SET_TEXT on focused editable node. Wired from clipboard handler (DCLP). Requires canRetrieveWindowContent (now declared).
 5. **Pointer injection**: injectPointer now consults motion action (tap/stroke/scroll), throttled to 8 px, mouse movement toggle, 20 ms stroke duration. Tracks lastX/lastY for move origin.
+
+   **Visible cursor overlay (implemented)**: `showCursor`/`hideCursor` in `BarrierAccessibilityService` add/remove a translucent overlay window (`WindowManager.addView`/`removeView`) via inner `CursorOverlayView` drawing a standard arrow; `injectPointer` mirrors position (down/move/scroll show, up hide). Window: `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` < API 23), flags NOT_TOUCHABLE/NOT_FOCUSABLE/LAYOUT_NO_LIMITS/LAYOUT_IN_SCREEN, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, translucent format, display-plus-margin geometry. Overlay is a render surface only; dispatchGesture remains sole gesture path. Hidden on disconnect / screensaver; injected input re-shows. Released in service onDestroy. Build + unit tests green.
 6. **Clipboard**: CCLP → onClipboardGrab provider → DCLP reply; DCLP → store in ClipboardManager + injectText. CLPS option respected.
 7. **Accessibility service registration**: meta-data XML + manifest entry. isEnabled() checks secure settings. openSettings() launches system settings.
 8. **UI wiring**: accessibility status surfacing (on create + resume), error display (TextView + Toast), open settings button, mouse movement CheckBox, battery optimization prompt.
@@ -62,7 +64,7 @@
 - Offline builds: use --offline; androidx.appcompat not cached.
 - Kotlin nested-class instantiation requires parens: `BarrierPacket.KeepAlivePacket()`, etc.
 - **Framework API finding**: public AccessibilityService dispatch surface in compileSdk 35 exposes only dispatchGesture and performGlobalAction. dispatchKeyEvent does not exist → discrete key injection not possible; global actions for back/home/recents only.
-- **Pointer injection**: dispatchGesture creates discrete gestures, not continuous pointer tracking. No visible cursor. Throttled to reduce phantom keystrokes.
+- **Pointer injection**: dispatchGesture creates discrete gestures, not continuous pointer tracking. Visible cursor now rendered via accessibility-hosted overlay (standard arrow); injection still discrete. Throttled to reduce phantom keystrokes.
 - **Text injection**: ACTION_SET_TEXT replaces field contents (no append). Only fires from clipboard path.
 - **Options**: CLPS and HART now applied; MDLT and SSVR stored but not acted upon.
 - **File transfer / drag**: DFTR/DDRG decoded and ignored.
@@ -71,7 +73,7 @@
 - **Git email**: chris@christopherpendlebury.com (verified on GitHub).
 
 ## Immediate next steps
-1. On-device validation: test connection, injection, clipboard, screensaver, options, reconnect, background survival on a real device with a real Barrier server.
+1. On-device validation: test connection, injection, clipboard, screensaver, options, reconnect, background survival on a real device with a real Barrier server. The visible cursor overlay now needs real-device validation (movement shows/moves cursor, button hold/release, disconnect/screensaver hide).
 2. Remaining key injection: arbitrary keycodes require hidden InputManager reflection — evaluate feasibility.
 3. File transfer/drag info handling (deferred stubs).
 4. UI improvements: update notification text with connection state, add plaintext TLS toggle.

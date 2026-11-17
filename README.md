@@ -16,7 +16,7 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible.
 
-**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. Injection uses discrete accessibility gestures (not a real system pointer), so there is no visible cursor. See [Status and limitations](docs/limitations.md) for details.
+**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. Injection uses discrete accessibility gestures (not a real system pointer). Injected pointer position is now mirrored onto a visible cursor overlay (standard arrow) hosted in the accessibility service; the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
 
 ## Features
 
@@ -62,7 +62,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 
 ## Known limitations
 
-- **No visible cursor**: `dispatchGesture` creates discrete gestures, not a system pointer. There is no public API for moving a mouse cursor.
+- **No real system cursor**: `dispatchGesture` creates discrete gestures, not a system pointer; the visible cursor is an overlay window rendering a standard arrow. There is no public API for moving a real system cursor.
 - **No arbitrary key injection**: Barrier key IDs are not Android key codes. No public injection API exists on compileSdk 35.
 - **TLS is not Barrier's TLS**: uses a trust-all manager. Barrier's self-signed cert fingerprint verification is not implemented.
 - **No plaintext toggle**: TLS is always attempted. No UI switch for plaintext mode.

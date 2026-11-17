@@ -92,6 +92,8 @@ Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In
 
 `injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer`, `injectKey`, and `injectText` are called from `MainActivity` only when a client listener fires. With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
 
+Pointer injection renders a visible cursor. `showCursor` / `hideCursor` add or remove a translucent overlay window (`WindowManager.addView` / `removeView`) whose inner `CursorOverlayView` draws a standard arrow. `injectPointer` mirrors injected position onto that overlay and drives show / move / hide; button-down, movement (when enabled), and scroll show the cursor, button-up hides it. The overlay uses window type `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` below API 23), `FLAG_NOT_TOUCHABLE` / `FLAG_NOT_FOCUSABLE` / `FLAG_LAYOUT_NO_LIMITS` / `FLAG_LAYOUT_IN_SCREEN`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, and a translucent format with a display-plus-margin window size. The overlay is a render surface only; `dispatchGesture` remains the sole gesture-producing path. The cursor hides on disconnect / screensaver via the client state listener and screensaver callback.
+
 ## Tests
 
 `FakeBarrierTransport` records `send` and lets a test `emit` a packet into `onPacket`. Client tests launch `connect` on `backgroundScope`, then `runCurrent()` and `advanceUntilIdle()`. The reconnect test also `advanceTimeBy(INITIAL_RECONNECT_BACKOFF_MILLIS)` because `advanceUntilIdle()` does not fire that delay on its own.
