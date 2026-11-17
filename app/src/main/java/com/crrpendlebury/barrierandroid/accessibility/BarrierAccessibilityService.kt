@@ -306,8 +306,22 @@ class BarrierAccessibilityService : AccessibilityService() {
             if (view == null) {
                 val params = createCursorLayoutParams()
                 val overlay = CursorOverlayView(this)
-                wm.addView(overlay, params)
-                cursorView = overlay
+                try {
+                    wm.addView(overlay, params)
+                    cursorView = overlay
+                } catch (t: Throwable) {
+                    // Capture window-add failures in the debug sink before
+                    // rethrowing, so a failing overlay add is traceable.
+                    BarrierAccessibilityService.log(
+                        this,
+                        "cursor overlay addView failed ${t.javaClass.simpleName}: ${t.message}",
+                    )
+                    throw t
+                }
+                BarrierAccessibilityService.log(
+                    this,
+                    "cursor overlay addView ok attached=${overlay.isAttachedToWindow} type=${params.type} flags=${params.flags}",
+                )
             }
             cursorView?.updatePosition(x, y)
             BarrierAccessibilityService.log(this, "cursor overlay show x=$x y=$y")
@@ -446,6 +460,10 @@ class BarrierAccessibilityService : AccessibilityService() {
         }
 
         override fun onDraw(canvas: Canvas) {
+            BarrierAccessibilityService.log(
+                this@BarrierAccessibilityService,
+                "cursor overlay draw x=${positionX} y=${positionY}",
+            )
             val width = CURSOR_WIDTH_PX
             val height = CURSOR_WIDTH_PX
             val path = Path().apply {
