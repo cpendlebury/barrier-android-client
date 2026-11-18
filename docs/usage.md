@@ -45,7 +45,7 @@ The status text is refreshed in `onCreate` and `onResume`.
 
 ## Mouse movement
 
-Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. Injected position is mirrored onto a visible cursor overlay (a standard arrow drawn in a translucent window hosted in the accessibility service); the cursor hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection while keeping button presses and scrolls.
+Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. Injected position is mirrored onto a visible cursor overlay (a standard arrow drawn in a translucent window hosted in the accessibility service); the cursor follows movement whether or not the checkbox is checked, hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection while keeping button presses and scrolls.
 
 ## What a real session still needs
 

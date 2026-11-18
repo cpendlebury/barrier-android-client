@@ -106,6 +106,7 @@ class BarrierAccessibilityService : AccessibilityService() {
      * Button presses, releases, and scrolls still do. This eliminates
      * phantom keystrokes on on-screen keyboards caused by movement
      * strokes passing over key areas. Toggle via [mouseMovementEnabled].
+     * The visible cursor still follows movement when this is false.
      */
     @Volatile
     var mouseMovementEnabled: Boolean = true
@@ -141,8 +142,9 @@ class BarrierAccessibilityService : AccessibilityService() {
      *
      * The injected motion is also mirrored onto the visible cursor overlay via
      * [showCursor] / [hideCursor]. The overlay is a render surface for position,
-     * not a gesture source. Button-down, movement (when [mouseMovementEnabled]),
-     * and scroll show the cursor; button-up hides it.
+     * not a gesture source. Button-down, movement, and scroll show the cursor;
+     * button-up hides it. Movement shows the cursor even when [mouseMovementEnabled]
+     * is false, because that flag only suppresses movement gestures.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         val gesture = when (action) {
@@ -152,6 +154,8 @@ class BarrierAccessibilityService : AccessibilityService() {
                 if (!mouseMovementEnabled) {
                     lastX = x
                     lastY = y
+                    BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE (gesture suppressed) x=$x y=$y")
+                    showCursor(x, y)
                     return false
                 }
                 val dx = x - lastDispatchedX
@@ -185,10 +189,8 @@ class BarrierAccessibilityService : AccessibilityService() {
                 showCursor(x, y)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (mouseMovementEnabled) {
-                    BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE x=$x y=$y")
-                    showCursor(x, y)
-                }
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE x=$x y=$y")
+                showCursor(x, y)
             }
             MotionEvent.ACTION_SCROLL -> {
                 BarrierAccessibilityService.log(this, "injectPointer ACTION_SCROLL x=$x y=$y")
@@ -538,7 +540,7 @@ class BarrierAccessibilityService : AccessibilityService() {
          * window reaches the screen and the arrow's position is the remaining
          * question. Must be set to false once the cursor is confirmed visible.
          */
-        private const val DEBUG_OVERLAY_FILL = true
+        private const val DEBUG_OVERLAY_FILL = false
         private const val DEBUG_OVERLAY_FILL_COLOR = 0x80FF0000.toInt()
 
         private val cursorPaint = Paint().apply {
