@@ -16,7 +16,7 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible.
 
-**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with trust-all manager, no double-connect), so a retest against a live server is the current open item on the connection path. Injection uses discrete accessibility gestures (not a real system pointer). Injected pointer position is now mirrored onto a visible cursor overlay (standard arrow) hosted in the accessibility service; the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
+**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with trust-all manager, no double-connect), so a retest against a live server is the current open item on the connection path. Injection uses discrete accessibility gestures (not a real system pointer). Injected pointer position is now mirrored onto a visible cursor overlay (standard arrow) hosted in the accessibility service; the overlay is a render surface, not a system pointer. The cursor overlay has since been visually confirmed on a real device. See [Status and limitations](docs/limitations.md) for details.
 
 ## Features
 
@@ -68,7 +68,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 - **No plaintext toggle**: TLS is always attempted. No UI switch for plaintext mode.
 - **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is stored but not read.
 - **File transfer / drag**: `DFTR`/`DDRG` packets are decoded and ignored.
-- **On-device validation**: the connection handshake has been tested on a real device; the TLS transport was rewritten after that test, so a retest against a live server is pending. The visible cursor overlay and full input-injection behaviour still need real-device validation.
+- **On-device validation**: the connection handshake has been tested on a real device and the visible cursor overlay has since been confirmed on a real device; the TLS transport was rewritten after the handshake test, so a retest against a live server is pending. Full input-injection behaviour (button hold/release, disconnect/screensaver hide, cursor size and position) still needs validation.
 
 ## License
 
