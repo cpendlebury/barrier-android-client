@@ -111,6 +111,7 @@ class BarrierForegroundService : Service() {
         }
 
         override fun onError(error: BarrierError) {
+            BarrierAccessibilityService.log(this@BarrierForegroundService, "client error: $error")
             connectionListener?.onError(error)
         }
     }
@@ -159,7 +160,15 @@ class BarrierForegroundService : Service() {
         if (networkCallback == null) {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    BarrierAccessibilityService.log(this@BarrierForegroundService, "network available: $network")
+                }
+
                 override fun onLost(network: Network) {
+                    BarrierAccessibilityService.log(
+                        this@BarrierForegroundService,
+                        "network lost: $network client=${client?.currentState}",
+                    )
                     client?.let { c ->
                         if (c.currentState == BarrierClientState.CONNECTED) {
                             c.disconnect()

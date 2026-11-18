@@ -222,6 +222,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        BarrierAccessibilityService.log(this, "activity paused")
         // Persist settings on every pause so they survive process death.
         // Use commit() for synchronous disk write.
         prefs.edit()
@@ -233,11 +234,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        BarrierAccessibilityService.log(this, "activity resumed")
         updateAccessibilityStatus()
         requestBatteryOptimizationExemption()
     }
 
+    override fun onStop() {
+        BarrierAccessibilityService.log(this, "activity stopped")
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        BarrierAccessibilityService.log(this, "activity destroyed")
         // Do not stop the service here. The service is a foreground service
         // that should survive activity destruction (backgrounding). The user
         // disconnects explicitly via the Disconnect button.
