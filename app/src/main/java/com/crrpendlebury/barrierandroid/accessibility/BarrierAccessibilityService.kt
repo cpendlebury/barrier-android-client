@@ -83,17 +83,6 @@ class BarrierAccessibilityService : AccessibilityService() {
 
     private var windowManager: WindowManager? = null
 
-    /**
-     * Application context used to host the cursor overlay. Red Moon's shipped
-     * overlay is constructed with the application context
-     * (`Overlay(applicationContext)`); the plain service context is only a
-     * fallback. Resolved through the getter because a bound service context is
-     * not available during construction, when the property initializer would
-     * otherwise run against a null context.
-     */
-    private val appContext: Context
-        get() = getApplicationContext() ?: this
-
     private var cursorView: CursorOverlayView? = null
 
     /**
@@ -302,9 +291,10 @@ class BarrierAccessibilityService : AccessibilityService() {
      * If an overlay is already attached it is repositioned; otherwise one is
      * created. Safe to call when no overlay exists or the service is not bound.
      *
-     * The overlay view and its window manager are hosted on the application
-     * context, as Red Moon's shipped overlay does; the service context is not
-     * used for the overlay window.
+     * The overlay view and its window manager are hosted on the service
+     * context; the application context does not carry the window token the
+     * accessibility overlay requires (the add then fails with
+     * BadTokenException: token null is not valid).
      */
     fun showCursor(x: Float, y: Float) {
         handler.post {
@@ -313,7 +303,7 @@ class BarrierAccessibilityService : AccessibilityService() {
             val view = cursorView
             if (view == null) {
                 val params = createCursorLayoutParams()
-                val overlay = CursorOverlayView(appContext)
+                val overlay = CursorOverlayView(this)
                 try {
                     wm.addView(overlay, params)
                     cursorView = overlay
@@ -360,7 +350,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         if (existing != null) {
             return existing
         }
-        val created = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val created = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         windowManager = created
         return created
     }
