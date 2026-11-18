@@ -2,7 +2,7 @@
 
 This is an experimental codebase. Treat the unit tests as the supported surface.
 
-The connection path is implemented end to end and is now expected to work: the client waits for the server's `Hello`, answers with `HelloBack`, completes the `QINF` → `DINF` → `CIAK` → `DSOP` → `CONNECTED` handshake, and opens a plain or TLS socket. A phone should now be able to join a Barrier server that speaks protocol v1.6 (Barrier 2.4.0 and newer). The handshake has been validated on device; the TLS transport was rewritten afterwards, so a retest against a live server is the remaining confirmation.
+The connection path is implemented end to end and is now expected to work: the client waits for the server's `Hello`, answers with `HelloBack`, completes the `QINF` → `DINF` → `CIAK` → `DSOP` → `CONNECTED` handshake, and opens a plain or TLS socket. A phone should now be able to join a Barrier server that speaks protocol v1.6 (Barrier 2.4.0 and newer). The handshake has been validated on device, and the TLS transport was rewritten afterwards; the visible cursor overlay was then visually confirmed on a real device over a live server connection, which exercises that rewritten path end to end.
 
 ## Intended product
 
@@ -39,7 +39,7 @@ Tapping **Connect**:
 
 So a `BarrierClient` is now constructed and its handshake coroutine runs. The client no longer sends `Hello` first; it waits for the server's `Hello` and responds with `HelloBack`. This matches Barrier's protocol. Previously the client sent `Hello` first, causing the server to reply with `EBAD` (protocol error).
 
-However, the socket it uses (`SocketBarrierTransport`) now implements the transport: `connect` opens a plain `java.net.Socket` for plaintext or an `SSLSocket` built through an `SSLContext` for TLS, performs the handshake, and no longer double-connects. The TLS path uses a trust-all manager and disables hostname verification, so it is not Barrier's fingerprint-verified TLS; whether it completes a handshake with a real Barrier server is the open real-device question. Socket failures are surfaced via `BarrierError.ConnectionFailed` (from `performConnect`) and via `onConnectionLost` → `closeTransport`.
+However, the socket it uses (`SocketBarrierTransport`) now implements the transport: `connect` opens a plain `java.net.Socket` for plaintext or an `SSLSocket` built through an `SSLContext` for TLS, performs the handshake, and no longer double-connects. The TLS path uses a trust-all manager and disables hostname verification, so it is not Barrier's fingerprint-verified TLS; during the cursor validation the client completed a handshake with a real Barrier server over TLS and delivered input through it. Socket failures are surfaced via `BarrierError.ConnectionFailed` (from `performConnect`) and via `onConnectionLost` → `closeTransport`.
 
 The status line receives `CONNECTING`, `HANDSHAKE`, and `CONNECTED` callbacks now that the listener is wired. `CONNECTING` and `HANDSHAKE` are not notified by `BarrierClient.connect()` (only `CONNECTED` is, via `handleSetOptions`), so the status jumps from `DISCONNECTED` to `CONNECTED` on a successful handshake.
 
