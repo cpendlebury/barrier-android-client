@@ -154,7 +154,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 if (!mouseMovementEnabled) {
                     lastX = x
                     lastY = y
-                    BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE (gesture suppressed) x=$x y=$y")
+                    logVerbose(this, "injectPointer ACTION_MOVE (gesture suppressed) x=$x y=$y")
                     showCursor(x, y)
                     return false
                 }
@@ -181,23 +181,24 @@ class BarrierAccessibilityService : AccessibilityService() {
         // Mirror injected pointer motion onto the visible cursor overlay. The
         // overlay is a render surface only; dispatchGesture above remains the
         // sole gesture-producing path. Button-down, movement, and scroll show
-        // the cursor; button-up hides it. Movement is suppressed by
-        // [mouseMovementEnabled], in which case only button actions act.
+        // the cursor; button-up hides it. Movement still updates the cursor
+        // when [mouseMovementEnabled] is false; that flag only suppresses the
+        // movement gesture.
         when (action) {
             MotionEvent.ACTION_DOWN -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_DOWN x=$x y=$y")
+                logVerbose(this, "injectPointer ACTION_DOWN x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_MOVE -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_MOVE x=$x y=$y")
+                logVerbose(this, "injectPointer ACTION_MOVE x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_SCROLL -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_SCROLL x=$x y=$y")
+                logVerbose(this, "injectPointer ACTION_SCROLL x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_UP -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP")
+                logVerbose(this, "injectPointer ACTION_UP")
                 hideCursor()
             }
             else -> Unit
@@ -301,7 +302,6 @@ class BarrierAccessibilityService : AccessibilityService() {
      */
     fun showCursor(x: Float, y: Float) {
         handler.post {
-            BarrierAccessibilityService.log(this, "cursor overlay show x=$x y=$y")
             val wm = resolveWindowManager()
             val view = cursorView
             if (view == null) {
@@ -326,7 +326,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 )
             }
             cursorView?.updatePosition(x, y)
-            BarrierAccessibilityService.log(this, "cursor overlay show x=$x y=$y")
+            logVerbose(this, "cursor overlay show x=$x y=$y")
         }
     }
 
@@ -497,7 +497,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         override fun onDraw(canvas: Canvas) {
             val location = IntArray(2)
             getLocationOnScreen(location)
-            BarrierAccessibilityService.log(
+            logVerbose(
                 this@BarrierAccessibilityService,
                 "cursor overlay draw x=$positionX y=$positionY w=$width h=$height " +
                     "screenX=${location[0]} screenY=${location[1]} " +
@@ -540,6 +540,21 @@ class BarrierAccessibilityService : AccessibilityService() {
          * window reaches the screen and the arrow's position is the remaining
          * question. Must be set to false once the cursor is confirmed visible.
          */
+        /**
+         * Diagnostic only. When true, per-event pointer and overlay lines (every
+         * injected motion, every overlay show, every draw) go to the debug log.
+         * Each call opens and appends to the file on the calling thread, so this
+         * is too costly for normal use and is off by default. Lifecycle lines
+         * (addView, attach, detach, size, hide) are always logged.
+         */
+        private const val VERBOSE_CURSOR_LOG = false
+
+        private fun logVerbose(context: Context, message: String) {
+            if (VERBOSE_CURSOR_LOG) {
+                log(context, message)
+            }
+        }
+
         private const val DEBUG_OVERLAY_FILL = false
         private const val DEBUG_OVERLAY_FILL_COLOR = 0x80FF0000.toInt()
 
