@@ -294,6 +294,9 @@ class BarrierAccessibilityService : AccessibilityService() {
      * [android.view.WindowManager.addView] must be called on the main thread.
      * If an overlay is already attached it is repositioned; otherwise one is
      * created. Safe to call when no overlay exists or the service is not bound.
+     * A failed add is logged as `cursor overlay addView failed` and skipped. It
+     * never throws, because an exception here would crash the app on the main
+     * looper.
      *
      * The overlay view and its window manager are hosted on the service
      * context; the application context does not carry the window token the
@@ -309,17 +312,19 @@ class BarrierAccessibilityService : AccessibilityService() {
                 val overlay = CursorOverlayView(this)
                 try {
                     wm.addView(overlay, params)
-                    cursorView = overlay
-                    overlay.setVisibility(View.VISIBLE)
                 } catch (t: Throwable) {
-                    // Capture window-add failures in the debug sink before
-                    // rethrowing, so a failing overlay add is traceable.
+                    // Logged and skipped, not rethrown: this runs on the main
+                    // looper, so a rethrow would crash the whole app and drop the
+                    // Barrier connection. cursorView stays null, so the next
+                    // movement or click retries the add.
                     BarrierAccessibilityService.log(
                         this,
                         "cursor overlay addView failed ${t.javaClass.simpleName}: ${t.message}",
                     )
-                    throw t
+                    return@post
                 }
+                cursorView = overlay
+                overlay.setVisibility(View.VISIBLE)
                 BarrierAccessibilityService.log(
                     this,
                     "cursor overlay addView ok attached=${overlay.isAttachedToWindow} type=${params.type} flags=${params.flags} visibility=${overlay.visibility}",
