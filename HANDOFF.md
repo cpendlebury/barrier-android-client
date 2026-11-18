@@ -66,6 +66,8 @@
 - **Framework API finding**: public AccessibilityService dispatch surface in compileSdk 35 exposes only dispatchGesture and performGlobalAction. dispatchKeyEvent does not exist → discrete key injection not possible; global actions for back/home/recents only.
 - **Pointer injection**: dispatchGesture creates discrete gestures, not continuous pointer tracking. Visible cursor now rendered via accessibility-hosted overlay (standard arrow); injection still discrete. Throttled to reduce phantom keystrokes.
 - **Cursor visibility (current debugging)**: overlay implementation landed (commits `2f51539` → `13e08c7` → `446cada` → `515cfbf`), but the cursor did **not** appear on device even though injection works (debug log shows `injectPointer ACTION_MOVE` firing). In-app log sink added (`barrier_debug.log`, external files dir) + show lifecycle logging (`cursor overlay show` at runnable start and after position update). Awaits: reinstall latest APK, move mouse during connected session, read `barrier_debug.log`, confirm show-path execution and overlay add/draw.
+
+  **2026-11-18 update**: the `createWindowContext(TYPE_ACCESSIBILITY_OVERLAY)` implementation crashed with `UnsupportedOperationException` (context not associated with a display) and was reverted to the plain service-context `WindowManager`. Current route under investigation: **route 2** — align the overlay with Red Moon's known-working pattern (full-screen translucent layout via `LayoutInflater`, `WRAP_CONTENT` + `gravity = TOP`, `NOT_TOUCHABLE`/`NOT_FOCUSABLE`, `TRANSLUCENT`, `TYPE_ACCESSIBILITY_OVERLAY`, plain-context add). Instrumentation added (`cursor overlay addView ok attached=… type=… flags=…`, `cursor overlay draw x=… y=…`) is committed and pushed (build green).
 - **Text injection**: ACTION_SET_TEXT replaces field contents (no append). Only fires from clipboard path.
 - **Options**: CLPS and HART now applied; MDLT and SSVR stored but not acted upon.
 - **File transfer / drag**: DFTR/DDRG decoded and ignored.
@@ -75,6 +77,8 @@
 
 ## Immediate next steps
 1. On-device validation: test connection, injection, clipboard, screensaver, options, reconnect, background survival on a real device with a real Barrier server. The visible cursor overlay now needs real-device validation (movement shows/moves cursor, button hold/release, disconnect/screensaver hide). Current blocker: cursor not visible despite working injection; using in-app `barrier_debug.log` (`Android/data/com.crrpendlebury.barrierandroid/files/barrier_debug.log`) to trace the overlay show path.
+
+   **2026-11-18 update — route 2**: after the `createWindowContext` crash + revert, selected **route 2** as the path to a working cursor (Red Moon-aligned overlay: full-screen translucent layout, `WRAP_CONTENT` + `gravity = TOP`, flags, `TYPE_ACCESSIBILITY_OVERLAY`, plain-context add). Instrumentation added and pushed (build green). Next: implement route 2 overlay layout, then real-device validation of the cursor.
 2. Remaining key injection: arbitrary keycodes require hidden InputManager reflection — evaluate feasibility.
 3. File transfer/drag info handling (deferred stubs).
 4. UI improvements: update notification text with connection state, add plaintext TLS toggle.

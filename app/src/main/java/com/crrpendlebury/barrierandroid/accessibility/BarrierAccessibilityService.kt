@@ -278,6 +278,14 @@ class BarrierAccessibilityService : AccessibilityService() {
      * outlives the activity and the foreground service. The overlay draws a
      * standard arrow; it mirrors position but is not a source of pointer events.
      *
+     * The window params mirror Red Moon's shipped overlay: a translucent window
+     * sized to the display plus margin, offset by [CURSOR_WINDOW_X] / [CURSOR_WINDOW_Y]
+     * so it covers the full display, typed `TYPE_ACCESSIBILITY_OVERLAY` while the
+     * service is enabled (application overlay on newer APIs, system overlay
+     * below), flagged `NOT_TOUCHABLE | NOT_FOCUSABLE | LAYOUT_NO_LIMITS |
+     * LAYOUT_IN_SCREEN`, translucent format, and cutout mode. The arrow tip is
+     * placed at the injected position.
+     *
      * Runs on the main thread via the service handler, because
      * [android.view.WindowManager.addView] must be called on the main thread.
      * If an overlay is already attached it is repositioned; otherwise one is
@@ -341,32 +349,53 @@ class BarrierAccessibilityService : AccessibilityService() {
         return created
     }
 
+    /**
+     * Builds the cursor overlay window params. Mirrors Red Moon's shipped
+     * overlay window (`Overlay.mLayoutParams`): a translucent window sized to
+     * the display plus margin, offset so it covers the full display, typed for
+     * an accessibility overlay, and flagged so it never intercepts touches or
+     * focus.
+     */
     private fun createCursorLayoutParams(): WindowManager.LayoutParams {
         val metrics = getResources().displayMetrics
         return WindowManager.LayoutParams(
             (metrics.widthPixels + CURSOR_WINDOW_MARGIN_PX).toInt(),
             (metrics.heightPixels + CURSOR_WINDOW_MARGIN_PX).toInt(),
-            0,
-            0,
-            PixelFormat.TRANSLUCENT,
             cursorWindowType(),
             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 .or(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
                 .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
                 .or(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN),
+            PixelFormat.TRANSLUCENT,
+            0,
+            0,
         ).apply {
+            x = CURSOR_WINDOW_X
+            y = CURSOR_WINDOW_Y
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
     }
 
-    private fun cursorWindowType(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
-        } else {
-            WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY
+    /**
+     * Red Moon's overlay window type ladder: accessibility overlay when the
+     * service is enabled (API >= 23), application overlay on newer APIs, system
+     * overlay below that. While this service is bound and enabled, the
+     * accessibility branch is the live path.
+     */
+    private fun cursorWindowType(): Int {
+        val accessibilityOverlayAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        val applicationOverlayAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+        return when {
+            accessibilityOverlayAvailable && BarrierAccessibilityService.isEnabled(this) ->
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+            applicationOverlayAvailable ->
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else ->
+                WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY
         }
+    }
 
     /**
      * Replaces the text of the focused editable node with [text].
@@ -439,15 +468,14 @@ class BarrierAccessibilityService : AccessibilityService() {
                 "cursor overlay draw x=${positionX} y=${positionY}",
             )
             val width = CURSOR_WIDTH_PX
-            val height = CURSOR_WIDTH_PX
             val path = Path().apply {
                 moveTo(0f, 0f)
-                lineTo(width - ARROW_SIDE_INSET_PX, height - ARROW_BASE_HEIGHT_PX)
-                lineTo(ARROW_SIDE_INSET_PX, height - ARROW_BASE_HEIGHT_PX)
+                lineTo(width - ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
+                lineTo(ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
                 close()
             }
             canvas.save()
-            canvas.translate(positionX, positionY)
+            canvas.translate(positionX - CURSOR_WINDOW_X, positionY - CURSOR_WINDOW_Y)
             canvas.drawPath(path, cursorPaint)
             canvas.restore()
         }
@@ -461,6 +489,8 @@ class BarrierAccessibilityService : AccessibilityService() {
         private const val SCROLL_DISTANCE_PX = 200f
         private const val MOVE_THROTTLE_PX = 8f
         private val CURSOR_WINDOW_MARGIN_PX = 4000f
+        private const val CURSOR_WINDOW_X = -1000
+        private const val CURSOR_WINDOW_Y = -1000
         private val CURSOR_WIDTH_PX = 48f
         private val ARROW_SIDE_INSET_PX = 6f
         private val ARROW_BASE_HEIGHT_PX = 40f
