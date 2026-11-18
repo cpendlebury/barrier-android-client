@@ -118,7 +118,7 @@ class BarrierAccessibilityService : AccessibilityService() {
      * hold a button down across calls or track a continuous drag the way a
      * real mouse does. What this does:
      *
-     * - [android.view.MotionEvent.ACTION_DOWN]: a tap (0 ms stroke) at (x, y).
+     * - [android.view.MotionEvent.ACTION_DOWN]: a tap ([TAP_DURATION_MS] stroke) at (x, y).
      * - [android.view.MotionEvent.ACTION_UP]: a tap at the last position.
      *   The framework has no "release held button" gesture, so this is a
      *   best-effort tap. A real hold needs [android.view.InputManager]
@@ -209,7 +209,7 @@ class BarrierAccessibilityService : AccessibilityService() {
     private fun tapGesture(x: Float, y: Float): GestureDescription {
         val path = Path().apply { moveTo(x, y) }
         return GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0L, 0L))
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, TAP_DURATION_MS))
             .setDisplayId(DISPLAY_ID)
             .build()
     }
@@ -535,6 +535,12 @@ class BarrierAccessibilityService : AccessibilityService() {
     companion object {
         private const val DISPLAY_ID = 0
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
+        /**
+         * Duration of a tap gesture. `StrokeDescription` rejects a non-positive
+         * duration with `IllegalArgumentException: Duration must be positive`, so
+         * a zero-length tap crashed the app on the first click. Keep this above 0.
+         */
+        private const val TAP_DURATION_MS = 10L
         private const val POINTER_STROKE_DURATION_MS = 20L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
