@@ -10,17 +10,19 @@ package com.crrpendlebury.barrierandroid
  * What Connect does today: if the accessibility service is not listed as
  * enabled, it shows a toast and an error line, then continues. It writes a
  * [BarrierForegroundService.PendingConnection] onto the service companion and
- * calls [startService]. The service does not read that companion property, so
- * no socket is opened and [barrierClientListener] is never attached to a
- * [com.crrpendlebury.barrierandroid.protocol.BarrierClient]. Status stays
- * `DISCONNECTED` because connecting and handshake are not listener events
- * anyway.
+ * calls [startService]. The service reads that companion property and builds
+ * the [com.crrpendlebury.barrierandroid.protocol.BarrierClient]; the client's
+ * handshake runs on the foreground service scope, and the client reaches
+ * [BarrierClientState.CONNECTED] from a server speaking protocol 1.6.
  *
- * Disconnect, and [onDestroy], stop the service. There is no "keep alive in
- * the background" switch distinct from the activity lifetime.
+ * Disconnect stops the service. Leaving the activity does not stop the
+ * service; the foreground service survives backgrounding. There is no separate
+ * "keep alive in the background" control — the foreground service is always
+ * active while connected.
  *
- * [handleClipboardData] and [readClipboardBytes] run only if a client invokes
- * them. Connect does not create that client. If they are called,
+ * [handleClipboardData] and [readClipboardBytes] run only when the client
+ * invokes them. The clipboard lambdas from the pending connection are copied
+ * onto the client, so a clipboard grab from the server reaches them. If called,
  * [handleClipboardData] replaces the device clipboard and then tries
  * [com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService.injectText],
  * which replaces a focused field rather than typing. Injection failure text

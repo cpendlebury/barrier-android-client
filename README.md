@@ -16,7 +16,7 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible.
 
-**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. Injection uses discrete accessibility gestures (not a real system pointer). Injected pointer position is now mirrored onto a visible cursor overlay (standard arrow) hosted in the accessibility service; the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
+**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with trust-all manager, no double-connect), so a retest against a live server is the current open item on the connection path. Injection uses discrete accessibility gestures (not a real system pointer). Injected pointer position is now mirrored onto a visible cursor overlay (standard arrow) hosted in the accessibility service; the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
 
 ## Features
 
@@ -29,7 +29,7 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 - **Foreground service** — keeps the connection alive while backgrounded (Android 8+ compliant, wake lock held)
 - **Reconnect with backoff** — exponential backoff (1s → 30s) on server-initiated disconnect
 - **Screensaver/options handling** — tracks server screensaver state and applies options (CLPS, HART, SSVR, MDLT)
-- **UI wiring** — accessibility service status surfacing, error display, open-settings button, mouse-movement toggle
+- **UI wiring** — accessibility service status surfacing, error display, open-settings button, battery optimization prompt
 - **Barrier logo** — actual Barrier project logo as app icon and in-app image
 
 ## Requirements
@@ -66,9 +66,9 @@ See [Usage](docs/usage.md) for the full walkthrough.
 - **No arbitrary key injection**: Barrier key IDs are not Android key codes. No public injection API exists on compileSdk 35.
 - **TLS is not Barrier's TLS**: uses a trust-all manager. Barrier's self-signed cert fingerprint verification is not implemented.
 - **No plaintext toggle**: TLS is always attempted. No UI switch for plaintext mode.
-- **Options partially applied**: CLPS and HART are now wired; MDLT and SSVR are stored but not acted upon.
+- **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is stored but not read.
 - **File transfer / drag**: `DFTR`/`DDRG` packets are decoded and ignored.
-- **On-device validation**: only basic connection and mouse movement tested on a real device.
+- **On-device validation**: the connection handshake has been tested on a real device; the TLS transport was rewritten after that test, so a retest against a live server is pending. The visible cursor overlay and full input-injection behaviour still need real-device validation.
 
 ## License
 

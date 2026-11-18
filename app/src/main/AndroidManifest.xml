@@ -9,9 +9,9 @@
   Settings → Accessibility. isEnabled() checks secure settings; it still
   returns false until the user toggles it on.
 
-  Foreground service: type specialUse without a PROPERTY_SPECIAL_USE_FGS_SUBTYPE
-  property. Android 14+ can reject the start. The service also calls APIs
-  newer than minSdk 22. See BarrierForegroundService.
+  Foreground service: type specialUse with PROPERTY_SPECIAL_USE_FGS_SUBTYPE
+  set to "input injection". The service also calls APIs newer than minSdk 22.
+  See BarrierForegroundService.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">

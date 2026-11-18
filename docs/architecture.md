@@ -48,7 +48,7 @@ BarrierForegroundService.onStartCommand()
 
 `clientListener` forwards state, input, and errors to `connectionListener` (now assigned). Input events reach the activity listener, which routes them to `BarrierAccessibilityService`. Clipboard data reaches `handleClipboardData`.
 
-The break is no longer at the service wiring step. It is now at the socket (see below) and at the accessibility service registration (fixed in the manifest, but injection still does not match real Barrier events).
+The break is no longer at the service wiring step. Service wiring is in place. The remaining breaks are the injection path (see below) and real-device validation.
 
 ## Intended path, not the one that runs
 
@@ -67,7 +67,7 @@ Breaks on that path, in order:
 
 1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` with a trust-all `TrustManager` for TLS. `connect()` no longer double-connects. TLS is still not Barrier's fingerprint-verified TLS. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
 2. The accessibility service is now declared with meta-data. `injectPointer` now consults the motion action (tap, stroke, scroll) but `dispatchGesture` creates discrete gestures, not continuous pointer tracking. `injectKey` still does not match real server key ids. `injectText` replaces field contents. See [limitations](limitations.md).
-3. The service's `stopSelf()` on `DISCONNECTED` cancels the reconnect scope.
+3. Reconnect wiring: the service's client listener forwards `DISCONNECTED` without stopping the service, so the client's reconnect loop now survives a server drop. The service is stopped by the activity's Disconnect button.
 
 ## Client state machine
 
@@ -84,7 +84,7 @@ Breaks on that path, in order:
 - `CBYE`, version errors, and `EBSY` / `EUNK` / `EBAD` call `closeTransport`. If the previous state was `CONNECTED`, that schedules reconnect unless `disconnect()` set `userInitiatedClose`.
 - `DFTR` and `DDRG` are ignored. `CINN` / `COUT` update screen sequence and notify `ScreenEntered` / `ScreenLeft`, then send `CNOP`. The activity ignores those two events.
 
-Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In the service that would be `serviceScope`. `onDestroy` cancels that scope. The service no longer calls `stopSelf()` on `DISCONNECTED`; reconnect survives a server drop. The service is stopped by the activity's Disconnect button. `onDestroy` does not stop the service, so the connection survives activity recreation. The activity re-attaches its listener to a running service via `BarrierForegroundService.instance`.
+Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In the service that would be `serviceScope`. `onDestroy` cancels that scope and stops the client; it does not stop the service itself, so a running service survives activity recreation. The service no longer calls `stopSelf()` on `DISCONNECTED`; reconnect survives a server drop. The service is stopped by the activity's Disconnect button. The activity re-attaches its listener to a running service via `BarrierForegroundService.instance`.
 
 ## Accessibility service
 
@@ -92,7 +92,7 @@ Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In
 
 `injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer`, `injectKey`, and `injectText` are called from `MainActivity` only when a client listener fires. With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
 
-Pointer injection renders a visible cursor. `showCursor` / `hideCursor` add or remove a translucent overlay window (`WindowManager.addView` / `removeView`) whose inner `CursorOverlayView` draws a standard arrow. `injectPointer` mirrors injected position onto that overlay and drives show / move / hide; button-down, movement (whether or not movement gestures are enabled), and scroll show the cursor, button-up hides it. The overlay uses window type `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` below API 23), `FLAG_NOT_TOUCHABLE` / `FLAG_NOT_FOCUSABLE` / `FLAG_LAYOUT_NO_LIMITS` / `FLAG_LAYOUT_IN_SCREEN`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, and a translucent format with a display-plus-margin window size. The overlay is a render surface only; `dispatchGesture` remains the sole gesture-producing path. The cursor hides on disconnect / screensaver via the client state listener and screensaver callback. The arrow is a classic pointer shape with a white fill and a black outline, so it stays visible on both light and dark content.
+Pointer injection renders a visible cursor. `showCursor` / `hideCursor` add or remove a translucent overlay window (`WindowManager.addView` / `removeView`) whose inner `CursorOverlayView` draws a standard arrow. `injectPointer` mirrors injected position onto that overlay and drives show / move / hide; button-down, movement, and scroll show the cursor, button-up hides it. The overlay uses window type `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` below API 23), `FLAG_NOT_TOUCHABLE` / `FLAG_NOT_FOCUSABLE` / `FLAG_LAYOUT_NO_LIMITS` / `FLAG_LAYOUT_IN_SCREEN`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, and a translucent format with a display-plus-margin window size. The overlay is a render surface only; `dispatchGesture` remains the sole gesture-producing path. The cursor hides on disconnect / screensaver via the client state listener and screensaver callback. The arrow is a classic pointer shape with a white fill and a black outline, so it stays visible on both light and dark content.
 
 ## Tests
 

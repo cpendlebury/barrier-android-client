@@ -48,4 +48,4 @@ Mouse movement does not send any gesture to the phone. The injected position is 
 
 ## What a real session still needs
 
-Even with the connection working, a fully usable session still needs: a real socket (TLS or plaintext), proper injection (real pointer events, not gestures), and on-device validation. See [limitations](limitations.md) and [configuration](configuration.md).
+Even with the connection working, a fully usable session still needs: proper injection (real pointer events, not gestures), and on-device validation. See [limitations](limitations.md) and [configuration](configuration.md).

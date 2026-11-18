@@ -34,11 +34,11 @@ const val MAX_RECONNECT_BACKOFF_MILLIS = 30_000L
  * `OPTION_CODE` macro, packed big-endian into a 32-bit int
  * (`'C'<<24 | 'L'<<16 | 'P'<<8 | 'S'` for clipboard sharing).
  *
- * [BarrierClient.applyOptions] reads only the first three. [OPTION_RELATIVE_MOUSE_MOVES]
+ * [BarrierClient.applyOptions] reads the first three: [OPTION_CLIPBOARD_SHARING]
+ * gates clipboard grab and data, [OPTION_HEARTBEAT] sets the keepalive interval,
+ * and [OPTION_SCREEN_SAVER_SYNC] records the screensaver flag. [OPTION_RELATIVE_MOUSE_MOVES]
  * is named so a later editor does not invent a second numeric id, but nothing
- * reads it yet. Storing an option does not mean the client honours it: clipboard
- * handlers ignore [OPTION_CLIPBOARD_SHARING], and the keepalive timer ignores
- * [OPTION_HEARTBEAT].
+ * reads it yet.
  */
 val OPTION_CLIPBOARD_SHARING: Int = 0x434C5053  // "CLPS"
 val OPTION_HEARTBEAT: Int = 0x48415254            // "HART"

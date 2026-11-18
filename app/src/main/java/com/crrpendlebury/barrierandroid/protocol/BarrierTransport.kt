@@ -6,8 +6,8 @@ package com.crrpendlebury.barrierandroid.protocol
  *
  * Contract:
  * - [connect] moves [state] to [TransportState.CONNECTED] or throws. The
- *   `useTls` argument is part of the contract; [SocketBarrierTransport]
- *   currently ignores it and uses the flag from its constructor instead.
+ *   `useTls` argument is part of the contract; [SocketBarrierTransport.connect]
+ *   uses its own parameter and ignores the constructor copies it was given.
  * - [send] may be called only after a successful connect. It writes one
  *   length-prefixed frame. It is suspending but the socket implementation
  *   blocks the caller on the write.

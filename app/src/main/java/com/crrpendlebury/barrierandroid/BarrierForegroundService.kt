@@ -35,39 +35,32 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service that is supposed to own the [BarrierClient].
+ * Foreground service that owns the [BarrierClient].
  *
  * Direction of control is unchanged: this process is the Barrier client, not
- * a keyboard for the computer. The service exists so a future working session
- * can outlive the activity. It does not do that today.
+ * a keyboard for the computer. The service exists so a working session can
+ * outlive the activity; it holds the client, the foreground notification, the
+ * wake lock, the WiFi lock, and the network callback that drives reconnect.
  *
  * Wiring: [MainActivity] assigns [Companion.pendingConnection]. [onStartCommand]
  * reads that companion property and copies [PendingConnection.listener] onto
  * [connectionListener]. [startConnection] builds the [BarrierClient] with the
- * internal [clientListener] wrapper (which forwards to [connectionListener]
- * and calls `stopSelf()` on [BarrierClientState.DISCONNECTED]) and copies the
- * clipboard lambdas from the pending connection. The client now actually starts.
+ * internal [clientListener] wrapper (which forwards to [connectionListener] and
+ * hides the cursor on [BarrierClientState.DISCONNECTED]) and copies the
+ * clipboard lambdas from the pending connection. The client now actually starts,
+ * and its handshake runs to [BarrierClientState.CONNECTED] against a server
+ * speaking protocol 1.6.
  *
- * Remaining caveat: [clientListener] calls `stopSelf()` on every
- * [BarrierClientState.DISCONNECTED], including the transient state published
- * by [BarrierClient.closeTransport] before it schedules a reconnect. With the
- * service alive, that cancels [serviceScope] and the reconnect job. Reconnect
- * only survives if the listener does not stop the service, or if the service
- * is not the reconnect owner. This is tracked as a known limitation, not
- * fixed here.
+ * The client listener forwards [BarrierClientState.DISCONNECTED] to the
+ * activity but does not stop the service: [BarrierClient.closeTransport]
+ * publishes that state before scheduling the reconnect, so stopping here would
+ * cancel [serviceScope] and the reconnect job. The service is stopped by the
+ * activity's Disconnect button.
  *
- * [clientListener] calls `stopSelf()` on every [BarrierClientState.DISCONNECTED].
- * [BarrierClient.closeTransport] notifies that state before it schedules
- * reconnect. Stopping the service cancels [serviceScope] and cancels the
- * reconnect job. Do not "fix" reconnect inside the client without changing
- * this listener, and do not treat disconnect as always fatal if reconnect is
- * meant to run.
- *
- * [onStartCommand] always calls [startForeground] with a type argument and
- * always creates a [android.app.NotificationChannel]. Those require API 29
- * and API 26. minSdk is 22. There is no `SDK_INT` guard. The manifest type
- * is `specialUse` without `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`, which Android 14
- * can reject.
+ * [onStartCommand] guards [android.app.NotificationChannel] creation
+ * (API 26) and the three-argument [startForeground] (API 29) with `SDK_INT`
+ * checks, and the manifest declares `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` for
+ * Android 14+, so the service can start on older and newer devices.
  *
  * The notification text is fixed. It does not reflect connection state.
  */

@@ -82,6 +82,6 @@ After `DSOP`, state becomes `CONNECTED` and keepalive starts. `CIAK` does not ch
 
 Keepalive: every 3000 ms the client sends `CALV` if still connected. A parallel watchdog closes the transport if `lastServerActivityNanos` is at least 9000 ms old. Both the timer and inbound packets update that timestamp, so the watchdog does not measure "missed server keepalives" independently of the client's own sends.
 
-Reconnect: `closeTransport` while state was `CONNECTED` starts a loop that waits `INITIAL_RECONNECT_BACKOFF_MILLIS`, then doubles up to `MAX_RECONNECT_BACKOFF_MILLIS`, and calls `performConnect`. `disconnect()` sets `userInitiatedClose` and does not schedule that loop. The Android service is not wired to let this loop run. See [architecture](architecture.md).
+Reconnect: `closeTransport` while state was `CONNECTED` starts a loop that waits `INITIAL_RECONNECT_BACKOFF_MILLIS`, then doubles up to `MAX_RECONNECT_BACKOFF_MILLIS`, and calls `performConnect`. `disconnect()` sets `userInitiatedClose` and does not schedule that loop. The service's client listener forwards the `DISCONNECTED` state without stopping the service, so this loop can run inside the service scope; the service is stopped by the activity's Disconnect button. See [architecture](architecture.md).
 
-Option ids this client names are listed in [configuration](configuration.md). Storing them does not change keepalive, clipboard, or pointer handling.
+Option ids this client names are listed in [configuration](configuration.md). `CLPS` and `HART` are now honoured by the client (clipboard gating and keepalive interval); `SSVR` is recorded; `MDLT` is not read. Storing an option does not change pointer handling.

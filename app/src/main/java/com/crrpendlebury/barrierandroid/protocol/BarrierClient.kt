@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
  * The computer runs the server and owns the keyboard and mouse. This object
  * receives that input and tells [listener]. It does not inject Android events
  * itself. Injection lives in the activity and the accessibility service, and
- * those are not wired to a live client today (see [com.crrpendlebury.barrierandroid.BarrierForegroundService]).
+ * the activity listener routes incoming input events there (see
+ * [com.crrpendlebury.barrierandroid.BarrierForegroundService]).
  *
  * Handshake this object actually performs:
  * 1. Open the transport and wait. The server sends `Hello` first.
@@ -32,9 +33,11 @@ import java.util.concurrent.TimeUnit
  *
  * Reconnect runs only after [closeTransport] observed [BarrierClientState.CONNECTED].
  * [disconnect] sets [userInitiatedClose] and must not schedule another attempt.
- * The service's listener calls `stopSelf()` on every disconnect, which cancels
- * [scope] and therefore cancels the reconnect job. Reconnect is unit-tested
- * and is not a feature of the running app until that listener changes.
+ * The foreground service's listener forwards [BarrierClientState.DISCONNECTED]
+ * without stopping the service, so the transient disconnect state does not
+ * cancel [scope] and the reconnect job can run. The service itself is stopped by
+ * the activity's Disconnect button. Reconnect is unit-tested and runs in the
+ * running app.
  */
 class BarrierClient(
     private val clientName: String,

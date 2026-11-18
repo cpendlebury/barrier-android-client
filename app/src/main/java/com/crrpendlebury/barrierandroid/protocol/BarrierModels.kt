@@ -28,9 +28,10 @@ enum class BarrierClientState {
  *
  * Socket connect failures, read errors, and unknown packets are not values of
  * this type. [SocketBarrierTransport] swallows read errors, and a thrown
- * [BarrierTransport.connect] is not caught by the foreground service. Only
- * an incompatible hello and the server rejection packets (`EBSY`, `EUNK`,
- * `EBAD`) become a [BarrierError].
+ * [BarrierTransport.connect] is caught by the foreground service, which wraps
+ * the connect call in `runCatching` and surfaces the failure through the client
+ * listener. Only an incompatible hello and the server rejection packets (`EBSY`,
+ * `EUNK`, `EBAD`) become a [BarrierError].
  */
 sealed class BarrierError {
     data class IncompatibleVersion(
@@ -128,9 +129,11 @@ sealed class BarrierInputEvent {
  * or [BarrierClientState.HANDSHAKE].
  *
  * The foreground service wraps the activity listener and, on
- * [BarrierClientState.DISCONNECTED], calls `stopSelf()`. That cancels the
- * scope the client uses for reconnect. A listener that treats every
- * disconnect as fatal will defeat [BarrierClient]'s backoff loop.
+ * [BarrierClientState.DISCONNECTED], forwards the state without stopping the
+ * service; the client publishes that state before scheduling a reconnect, so
+ * stopping here would cancel the scope the reconnect loop needs. A listener
+ * that treats every disconnect as fatal will defeat [BarrierClient]'s backoff
+ * loop.
  */
 interface BarrierClientListener {
     fun onStateChanged(state: BarrierClientState)
