@@ -233,6 +233,7 @@ class BarrierForegroundService : Service() {
         }
         networkCallback = null
         Companion.instance = null
+        BarrierAccessibilityService.log(this, "foreground service destroyed")
         super.onDestroy()
     }
 

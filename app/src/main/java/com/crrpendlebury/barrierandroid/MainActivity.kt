@@ -157,7 +157,10 @@ class MainActivity : ComponentActivity() {
         errorTextView = findViewById(R.id.errorTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
-        disconnectButton.setOnClickListener { stopService(Intent(this, BarrierForegroundService::class.java)) }
+        disconnectButton.setOnClickListener {
+            BarrierAccessibilityService.log(this, "disconnect button pressed")
+            stopService(Intent(this, BarrierForegroundService::class.java))
+        }
         openAccessibilitySettingsButton.setOnClickListener { BarrierAccessibilityService.openSettings(this) }
         mouseMovementCheckBox.setOnCheckedChangeListener { _, isChecked ->
             BarrierAccessibilityService.instance?.mouseMovementEnabled = isChecked

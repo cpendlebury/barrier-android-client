@@ -186,7 +186,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         // movement gesture.
         when (action) {
             MotionEvent.ACTION_DOWN -> {
-                logVerbose(this, "injectPointer ACTION_DOWN x=$x y=$y")
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_DOWN x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -198,7 +198,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 showCursor(x, y)
             }
             MotionEvent.ACTION_UP -> {
-                logVerbose(this, "injectPointer ACTION_UP")
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP lastX=$lastX lastY=$lastY")
                 hideCursor()
             }
             else -> Unit
