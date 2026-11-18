@@ -119,10 +119,11 @@ class BarrierAccessibilityService : AccessibilityService() {
      * real mouse does. What this does:
      *
      * - [android.view.MotionEvent.ACTION_DOWN]: a tap ([TAP_DURATION_MS] stroke) at (x, y).
-     * - [android.view.MotionEvent.ACTION_UP]: a tap at the last position.
-     *   The framework has no "release held button" gesture, so this is a
-     *   best-effort tap. A real hold needs [android.view.InputManager]
-     *   injection, which is not public.
+     * - [android.view.MotionEvent.ACTION_UP]: no gesture. The tap was already
+     *   dispatched on press; a second tap here made every click a double press
+     *   (9 became 99, a checkbox toggled twice). The framework has no "release
+     *   held button" gesture, so a real hold needs [android.view.InputManager]
+     *   injection, which is not public. This only hides the cursor.
      * - [android.view.MotionEvent.ACTION_MOVE]: if [mouseMovementEnabled] is
      *   true and the pointer has moved more than [MOVE_THROTTLE_PX] from
      *   the last dispatched position, a short stroke (duration
@@ -149,7 +150,11 @@ class BarrierAccessibilityService : AccessibilityService() {
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         val gesture = when (action) {
             MotionEvent.ACTION_DOWN -> tapGesture(x, y)
-            MotionEvent.ACTION_UP -> tapGesture(lastX, lastY)
+            MotionEvent.ACTION_UP -> {
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP lastX=$lastX lastY=$lastY")
+                hideCursor()
+                return false
+            }
             MotionEvent.ACTION_MOVE -> {
                 if (!mouseMovementEnabled) {
                     lastX = x
@@ -196,10 +201,6 @@ class BarrierAccessibilityService : AccessibilityService() {
             MotionEvent.ACTION_SCROLL -> {
                 logVerbose(this, "injectPointer ACTION_SCROLL x=$x y=$y")
                 showCursor(x, y)
-            }
-            MotionEvent.ACTION_UP -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP lastX=$lastX lastY=$lastY")
-                hideCursor()
             }
             else -> Unit
         }
