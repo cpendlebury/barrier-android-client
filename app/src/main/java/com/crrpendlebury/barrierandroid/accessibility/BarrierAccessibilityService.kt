@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -379,6 +380,11 @@ class BarrierAccessibilityService : AccessibilityService() {
                 .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
                 .or(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
             format = PixelFormat.TRANSLUCENT
+            // Anchor to the top-left so x and y are absolute window offsets.
+            // With the default centre gravity the system shifts the window by
+            // (display - window) / 2, which put it at -3000 instead of -1000 on
+            // device and pushed the arrow off the left and top edges.
+            gravity = Gravity.TOP or Gravity.START
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
