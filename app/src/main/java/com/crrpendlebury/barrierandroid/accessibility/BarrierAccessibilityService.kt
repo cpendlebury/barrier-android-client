@@ -86,11 +86,13 @@ class BarrierAccessibilityService : AccessibilityService() {
     /**
      * Application context used to host the cursor overlay. Red Moon's shipped
      * overlay is constructed with the application context
-     * (`Overlay(applicationContext)`); the plain service context is not used for
-     * the overlay view or its window manager, mirroring the known-working
-     * Red Moon pattern.
+     * (`Overlay(applicationContext)`); the plain service context is only a
+     * fallback. Resolved through the getter because a bound service context is
+     * not available during construction, when the property initializer would
+     * otherwise run against a null context.
      */
-    private val appContext: Context = getApplicationContext()
+    private val appContext: Context
+        get() = getApplicationContext() ?: this
 
     private var cursorView: CursorOverlayView? = null
 
