@@ -475,6 +475,16 @@ class BarrierAccessibilityService : AccessibilityService() {
             invalidate()
         }
 
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            BarrierAccessibilityService.log(this@BarrierAccessibilityService, "cursor overlay attached to window")
+        }
+
+        override fun onDetachedFromWindow() {
+            BarrierAccessibilityService.log(this@BarrierAccessibilityService, "cursor overlay detached from window")
+            super.onDetachedFromWindow()
+        }
+
         override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             BarrierAccessibilityService.log(
                 this@BarrierAccessibilityService,
