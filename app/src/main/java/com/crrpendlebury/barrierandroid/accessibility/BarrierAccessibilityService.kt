@@ -352,26 +352,27 @@ class BarrierAccessibilityService : AccessibilityService() {
     /**
      * Builds the cursor overlay window params. Mirrors Red Moon's shipped
      * overlay window (`Overlay.mLayoutParams`): a translucent window sized to
-     * the display plus margin, offset so it covers the full display, typed for
-     * an accessibility overlay, and flagged so it never intercepts touches or
-     * focus.
+     * the display plus margin, offset by [CURSOR_WINDOW_X] / [CURSOR_WINDOW_Y]
+     * so it covers the full display, typed `TYPE_ACCESSIBILITY_OVERLAY` while
+     * the service is enabled (application overlay on newer APIs, system overlay
+     * below), flagged `NOT_TOUCHABLE | NOT_FOCUSABLE | LAYOUT_NO_LIMITS |
+     * LAYOUT_IN_SCREEN`, translucent format, and cutout mode. Uses the
+     * no-argument constructor plus field assignment, as Red Moon does, because
+     * the convenience constructors shift their arguments.
      */
     private fun createCursorLayoutParams(): WindowManager.LayoutParams {
         val metrics = getResources().displayMetrics
-        return WindowManager.LayoutParams(
-            (metrics.widthPixels + CURSOR_WINDOW_MARGIN_PX).toInt(),
-            (metrics.heightPixels + CURSOR_WINDOW_MARGIN_PX).toInt(),
-            cursorWindowType(),
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                .or(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
-                .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
-                .or(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN),
-            PixelFormat.TRANSLUCENT,
-            0,
-            0,
-        ).apply {
+        return WindowManager.LayoutParams().apply {
+            width = (metrics.widthPixels + CURSOR_WINDOW_MARGIN_PX).toInt()
+            height = (metrics.heightPixels + CURSOR_WINDOW_MARGIN_PX).toInt()
             x = CURSOR_WINDOW_X
             y = CURSOR_WINDOW_Y
+            type = cursorWindowType()
+            flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                .or(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+                .or(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
+            format = PixelFormat.TRANSLUCENT
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
