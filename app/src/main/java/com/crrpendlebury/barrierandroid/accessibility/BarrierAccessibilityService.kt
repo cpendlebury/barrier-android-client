@@ -469,16 +469,30 @@ class BarrierAccessibilityService : AccessibilityService() {
             invalidate()
         }
 
-        override fun onDraw(canvas: Canvas) {
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             BarrierAccessibilityService.log(
                 this@BarrierAccessibilityService,
-                "cursor overlay draw x=${positionX} y=${positionY} w=${width} h=${height}",
+                "cursor overlay size w=$w h=$h",
             )
-            val arrowWidth = CURSOR_WIDTH_PX
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val location = IntArray(2)
+            getLocationOnScreen(location)
+            BarrierAccessibilityService.log(
+                this@BarrierAccessibilityService,
+                "cursor overlay draw x=$positionX y=$positionY w=$width h=$height " +
+                    "screenX=${location[0]} screenY=${location[1]} " +
+                    "windowVisibility=$windowVisibility shown=$isShown",
+            )
+            if (DEBUG_OVERLAY_FILL) {
+                canvas.drawColor(DEBUG_OVERLAY_FILL_COLOR)
+            }
+            val scale = resources.displayMetrics.density
             val path = Path().apply {
                 moveTo(0f, 0f)
-                lineTo(arrowWidth - ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
-                lineTo(ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
+                lineTo((CURSOR_WIDTH_DP - ARROW_SIDE_INSET_DP) * scale, ARROW_BASE_HEIGHT_DP * scale)
+                lineTo(ARROW_SIDE_INSET_DP * scale, ARROW_BASE_HEIGHT_DP * scale)
                 close()
             }
             canvas.save()
@@ -498,9 +512,18 @@ class BarrierAccessibilityService : AccessibilityService() {
         private val CURSOR_WINDOW_MARGIN_PX = 4000f
         private const val CURSOR_WINDOW_X = -1000
         private const val CURSOR_WINDOW_Y = -1000
-        private val CURSOR_WIDTH_PX = 48f
-        private val ARROW_SIDE_INSET_PX = 6f
-        private val ARROW_BASE_HEIGHT_PX = 40f
+        private const val CURSOR_WIDTH_DP = 24f
+        private const val ARROW_SIDE_INSET_DP = 3f
+        private const val ARROW_BASE_HEIGHT_DP = 20f
+
+        /**
+         * Diagnostic only. When true, the overlay fills its whole window with a
+         * translucent red colour on every draw, so a visible result proves the
+         * window reaches the screen and the arrow's position is the remaining
+         * question. Must be set to false once the cursor is confirmed visible.
+         */
+        private const val DEBUG_OVERLAY_FILL = true
+        private const val DEBUG_OVERLAY_FILL_COLOR = 0x80FF0000.toInt()
 
         private val cursorPaint = Paint().apply {
             isAntiAlias = true
