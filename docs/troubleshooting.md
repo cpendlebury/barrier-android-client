@@ -61,7 +61,7 @@ After a server drop, the client reconnects with exponential backoff (1s â†’ 2s â
 
 ## Mouse movement issues
 
-- Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. The injected position is mirrored onto a visible cursor overlay that adds a translucent window hosting a standard arrow in the accessibility service; the arrow is drawn in a high-contrast white so it stays visible over the dimmed display.
+- Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. The injected position is mirrored onto a visible cursor overlay that adds a translucent window hosting a standard arrow in the accessibility service; the arrow is a classic pointer with a white fill and black outline so it stays visible on light and dark content.
 - Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection.
 - Scroll direction and amount are not preserved (swipes down a fixed 200 px).
 

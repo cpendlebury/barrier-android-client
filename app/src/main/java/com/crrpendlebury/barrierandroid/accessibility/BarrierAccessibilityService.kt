@@ -506,16 +506,23 @@ class BarrierAccessibilityService : AccessibilityService() {
             if (DEBUG_OVERLAY_FILL) {
                 canvas.drawColor(DEBUG_OVERLAY_FILL_COLOR)
             }
-            val scale = resources.displayMetrics.density
+            val density = resources.displayMetrics.density
+            val scale = CURSOR_SCALE * density
             val path = Path().apply {
-                moveTo(0f, 0f)
-                lineTo((CURSOR_WIDTH_DP - ARROW_SIDE_INSET_DP) * scale, ARROW_BASE_HEIGHT_DP * scale)
-                lineTo(ARROW_SIDE_INSET_DP * scale, ARROW_BASE_HEIGHT_DP * scale)
+                val points = CURSOR_OUTLINE_POINTS
+                moveTo(points[0] * scale, points[1] * scale)
+                var index = 2
+                while (index < points.size) {
+                    lineTo(points[index] * scale, points[index + 1] * scale)
+                    index += 2
+                }
                 close()
             }
+            cursorOutlinePaint.strokeWidth = CURSOR_OUTLINE_DP * density
             canvas.save()
             canvas.translate(positionX - CURSOR_WINDOW_X, positionY - CURSOR_WINDOW_Y)
-            canvas.drawPath(path, cursorPaint)
+            canvas.drawPath(path, cursorFillPaint)
+            canvas.drawPath(path, cursorOutlinePaint)
             canvas.restore()
         }
     }
@@ -530,9 +537,21 @@ class BarrierAccessibilityService : AccessibilityService() {
         private val CURSOR_WINDOW_MARGIN_PX = 4000f
         private const val CURSOR_WINDOW_X = -1000
         private const val CURSOR_WINDOW_Y = -1000
-        private const val CURSOR_WIDTH_DP = 24f
-        private const val ARROW_SIDE_INSET_DP = 3f
-        private const val ARROW_BASE_HEIGHT_DP = 20f
+        /**
+         * Classic pointer outline in design units (tip at the origin, about 12 by
+         * 19 units), as x, y pairs. Scaled by [CURSOR_SCALE] and display density.
+         */
+        private val CURSOR_OUTLINE_POINTS = floatArrayOf(
+            0f, 0f,
+            0f, 16f,
+            4.2f, 12.4f,
+            7f, 18.8f,
+            9.4f, 17.8f,
+            6.6f, 11.6f,
+            11.6f, 11.6f,
+        )
+        private const val CURSOR_SCALE = 1.3f
+        private const val CURSOR_OUTLINE_DP = 1.5f
 
         /**
          * Diagnostic only. When true, the overlay fills its whole window with a
@@ -558,13 +577,22 @@ class BarrierAccessibilityService : AccessibilityService() {
         private const val DEBUG_OVERLAY_FILL = false
         private const val DEBUG_OVERLAY_FILL_COLOR = 0x80FF0000.toInt()
 
-        private val cursorPaint = Paint().apply {
+        /**
+         * Cursor fill is white and the outline is black, as on a desktop pointer,
+         * so the arrow stays visible on both light and dark content. A white-only
+         * arrow disappeared on white backgrounds.
+         */
+        private val cursorFillPaint = Paint().apply {
             isAntiAlias = true
-            // Opaque, high-contrast arrow colour. The overlay paints over the
-            // display during a Barrier session, which the screen filter dims to
-            // night levels; a black arrow is invisible against that darkened
-            // background, so the cursor is drawn white.
+            style = Paint.Style.FILL
             color = Color.WHITE
+        }
+
+        private val cursorOutlinePaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
+            color = Color.BLACK
         }
 
         private const val LOG_FILE_NAME = "barrier_debug.log"
