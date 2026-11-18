@@ -13,7 +13,6 @@ The screen is a small form. The app now connects to a real Barrier server: the h
 | Disconnect | `disconnectButton` | `stopService` on `BarrierForegroundService` |
 | Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings |
 | Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
-| Mouse movement gestures | `mouseMovementCheckBox` | Toggles whether pure movement creates gestures. Disable to avoid phantom keystrokes on on-screen keyboards |
 | Error line | `errorTextView` | Red text for connection errors, injection failures, disabled-service warnings |
 | Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
 
@@ -45,7 +44,7 @@ The status text is refreshed in `onCreate` and `onResume`.
 
 ## Mouse movement
 
-Mouse movement creates discrete gestures (tap/stroke/swipe), not a continuous pointer. Injected position is mirrored onto a visible cursor overlay (a standard arrow drawn in a translucent window hosted in the accessibility service); the cursor follows movement whether or not the checkbox is checked, hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Movement strokes can trigger phantom keystrokes on on-screen keyboards. Use the "Inject mouse movement gestures" checkbox to disable movement injection while keeping button presses and scrolls.
+Mouse movement does not send any gesture to the phone. The injected position is mirrored onto a visible cursor overlay (a classic pointer drawn in a translucent window hosted in the accessibility service). The cursor follows movement, hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Clicks and scrolls land at the tracked position. Movement strokes were removed because they caused phantom keystrokes on on-screen keyboards and accidental scrolls.
 
 ## What a real session still needs
 

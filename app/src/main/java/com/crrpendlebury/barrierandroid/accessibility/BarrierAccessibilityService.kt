@@ -94,24 +94,6 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var lastY = 0f
 
     /**
-     * Tracks the last position for which a gesture was actually dispatched.
-     * Used to throttle move gestures: only send when the pointer has moved
-     * more than [MOVE_THROTTLE_PX] from the last dispatched position.
-     */
-    private var lastDispatchedX = 0f
-    private var lastDispatchedY = 0f
-
-    /**
-     * When false, pure movement (ACTION_MOVE) does not create a gesture.
-     * Button presses, releases, and scrolls still do. This eliminates
-     * phantom keystrokes on on-screen keyboards caused by movement
-     * strokes passing over key areas. Toggle via [mouseMovementEnabled].
-     * The visible cursor still follows movement when this is false.
-     */
-    @Volatile
-    var mouseMovementEnabled: Boolean = true
-
-    /**
      * Dispatches a gesture for the requested pointer action.
      *
      * `dispatchGesture` creates discrete, fire-and-forget gestures. It cannot
@@ -124,11 +106,10 @@ class BarrierAccessibilityService : AccessibilityService() {
      *   (9 became 99, a checkbox toggled twice). The framework has no "release
      *   held button" gesture, so a real hold needs [android.view.InputManager]
      *   injection, which is not public. This only hides the cursor.
-     * - [android.view.MotionEvent.ACTION_MOVE]: if [mouseMovementEnabled] is
-     *   true and the pointer has moved more than [MOVE_THROTTLE_PX] from
-     *   the last dispatched position, a short stroke (duration
-     *   [POINTER_STROKE_DURATION_MS]) from the last position to (x, y).
-     *   Otherwise returns false without dispatching (throttled / disabled).
+     * - [android.view.MotionEvent.ACTION_MOVE]: no gesture. It only updates the
+     *   tracked position and moves the cursor. Movement strokes were removed:
+     *   they caused side effects (phantom keystrokes, accidental scrolls), and
+     *   clicks already land on the tracked position.
      * - [android.view.MotionEvent.ACTION_SCROLL]: a vertical swipe. x/y deltas
      *   are not passed in (the caller only gives a point), so this swipes
      *   down a fixed amount. A real scroll needs axis data, which
@@ -137,15 +118,15 @@ class BarrierAccessibilityService : AccessibilityService() {
      *
      * [action] is now consulted. Earlier versions ignored it.
      *
-     * @return whatever [dispatchGesture] returns, or false if throttled/disabled.
+     * @return whatever [dispatchGesture] returns, or false when no gesture was
+     * dispatched (movement and release).
      * True means the framework accepted the gesture object, not that a
      * pointer event was delivered to an app.
      *
      * The injected motion is also mirrored onto the visible cursor overlay via
      * [showCursor] / [hideCursor]. The overlay is a render surface for position,
      * not a gesture source. Button-down, movement, and scroll show the cursor;
-     * button-up hides it. Movement shows the cursor even when [mouseMovementEnabled]
-     * is false, because that flag only suppresses movement gestures.
+     * button-up hides it.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         val gesture = when (action) {
@@ -156,46 +137,26 @@ class BarrierAccessibilityService : AccessibilityService() {
                 return false
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!mouseMovementEnabled) {
-                    lastX = x
-                    lastY = y
-                    logVerbose(this, "injectPointer ACTION_MOVE (gesture suppressed) x=$x y=$y")
-                    showCursor(x, y)
-                    return false
-                }
-                val dx = x - lastDispatchedX
-                val dy = y - lastDispatchedY
-                if (dx * dx + dy * dy < MOVE_THROTTLE_PX * MOVE_THROTTLE_PX) {
-                    lastX = x
-                    lastY = y
-                    return false
-                }
-                strokeGesture(lastX, lastY, x, y)
+                lastX = x
+                lastY = y
+                logVerbose(this, "injectPointer ACTION_MOVE x=$x y=$y")
+                showCursor(x, y)
+                return false
             }
             MotionEvent.ACTION_SCROLL -> scrollGesture(x, y)
             else -> tapGesture(x, y)
         }
         lastX = x
         lastY = y
-        if (action == MotionEvent.ACTION_MOVE) {
-            lastDispatchedX = x
-            lastDispatchedY = y
-        }
         val dispatched = dispatchGesture(gesture, gestureResultCallback, handler)
 
         // Mirror injected pointer motion onto the visible cursor overlay. The
         // overlay is a render surface only; dispatchGesture above remains the
-        // sole gesture-producing path. Button-down, movement, and scroll show
-        // the cursor; button-up hides it. Movement still updates the cursor
-        // when [mouseMovementEnabled] is false; that flag only suppresses the
-        // movement gesture.
+        // sole gesture-producing path. Button-down and scroll show the cursor
+        // here; movement returns early above, and button-up hides it.
         when (action) {
             MotionEvent.ACTION_DOWN -> {
                 BarrierAccessibilityService.log(this, "injectPointer ACTION_DOWN x=$x y=$y")
-                showCursor(x, y)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                logVerbose(this, "injectPointer ACTION_MOVE x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_SCROLL -> {
@@ -211,17 +172,6 @@ class BarrierAccessibilityService : AccessibilityService() {
         val path = Path().apply { moveTo(x, y) }
         return GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, TAP_DURATION_MS))
-            .setDisplayId(DISPLAY_ID)
-            .build()
-    }
-
-    private fun strokeGesture(fromX: Float, fromY: Float, toX: Float, toY: Float): GestureDescription {
-        val path = Path().apply {
-            moveTo(fromX, fromY)
-            lineTo(toX, toY)
-        }
-        return GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0L, POINTER_STROKE_DURATION_MS))
             .setDisplayId(DISPLAY_ID)
             .build()
     }
@@ -542,10 +492,8 @@ class BarrierAccessibilityService : AccessibilityService() {
          * a zero-length tap crashed the app on the first click. Keep this above 0.
          */
         private const val TAP_DURATION_MS = 10L
-        private const val POINTER_STROKE_DURATION_MS = 20L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
-        private const val MOVE_THROTTLE_PX = 8f
         private val CURSOR_WINDOW_MARGIN_PX = 4000f
         private const val CURSOR_WINDOW_X = -1000
         private const val CURSOR_WINDOW_Y = -1000

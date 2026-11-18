@@ -22,7 +22,7 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 
 - **Protocol client** — full Barrier v1.6 handshake, keepalive, input events, clipboard, screensaver, options, reconnect
 - **TCP/TLS transport** — plain socket or TLS (trust-all manager; not Barrier's fingerprint-verified TLS)
-- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, stroke, scroll); throttled to reduce phantom interactions
+- **Pointer injection** — discrete gestures via `dispatchGesture` (tap and scroll only; movement sends no gesture)
 - **Text injection** — `ACTION_SET_TEXT` on the focused editable field (clipboard push path)
 - **Navigation keys** — Back, Home, Recents via framework global actions
 - **Clipboard sync** — CCLP/DCLP round-trip via `ClipboardManager`
