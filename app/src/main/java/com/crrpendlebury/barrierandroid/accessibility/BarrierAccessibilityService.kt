@@ -498,7 +498,11 @@ class BarrierAccessibilityService : AccessibilityService() {
 
         private val cursorPaint = Paint().apply {
             isAntiAlias = true
-            color = Color.BLACK
+            // Opaque, high-contrast arrow colour. The overlay paints over the
+            // display during a Barrier session, which the screen filter dims to
+            // night levels; a black arrow is invisible against that darkened
+            // background, so the cursor is drawn white.
+            color = Color.WHITE
         }
 
         private const val LOG_FILE_NAME = "barrier_debug.log"
