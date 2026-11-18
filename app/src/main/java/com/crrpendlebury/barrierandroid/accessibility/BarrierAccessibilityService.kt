@@ -83,6 +83,15 @@ class BarrierAccessibilityService : AccessibilityService() {
 
     private var windowManager: WindowManager? = null
 
+    /**
+     * Application context used to host the cursor overlay. Red Moon's shipped
+     * overlay is constructed with the application context
+     * (`Overlay(applicationContext)`); the plain service context is not used for
+     * the overlay view or its window manager, mirroring the known-working
+     * Red Moon pattern.
+     */
+    private val appContext: Context = getApplicationContext()
+
     private var cursorView: CursorOverlayView? = null
 
     /**
@@ -290,6 +299,10 @@ class BarrierAccessibilityService : AccessibilityService() {
      * [android.view.WindowManager.addView] must be called on the main thread.
      * If an overlay is already attached it is repositioned; otherwise one is
      * created. Safe to call when no overlay exists or the service is not bound.
+     *
+     * The overlay view and its window manager are hosted on the application
+     * context, as Red Moon's shipped overlay does; the service context is not
+     * used for the overlay window.
      */
     fun showCursor(x: Float, y: Float) {
         handler.post {
@@ -298,10 +311,11 @@ class BarrierAccessibilityService : AccessibilityService() {
             val view = cursorView
             if (view == null) {
                 val params = createCursorLayoutParams()
-                val overlay = CursorOverlayView(this)
+                val overlay = CursorOverlayView(appContext)
                 try {
                     wm.addView(overlay, params)
                     cursorView = overlay
+                    overlay.setVisibility(View.VISIBLE)
                 } catch (t: Throwable) {
                     // Capture window-add failures in the debug sink before
                     // rethrowing, so a failing overlay add is traceable.
@@ -313,7 +327,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 }
                 BarrierAccessibilityService.log(
                     this,
-                    "cursor overlay addView ok attached=${overlay.isAttachedToWindow} type=${params.type} flags=${params.flags}",
+                    "cursor overlay addView ok attached=${overlay.isAttachedToWindow} type=${params.type} flags=${params.flags} visibility=${overlay.visibility}",
                 )
             }
             cursorView?.updatePosition(x, y)
@@ -344,7 +358,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         if (existing != null) {
             return existing
         }
-        val created = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val created = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         windowManager = created
         return created
     }
