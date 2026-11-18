@@ -480,12 +480,12 @@ class BarrierAccessibilityService : AccessibilityService() {
         override fun onDraw(canvas: Canvas) {
             BarrierAccessibilityService.log(
                 this@BarrierAccessibilityService,
-                "cursor overlay draw x=${positionX} y=${positionY}",
+                "cursor overlay draw x=${positionX} y=${positionY} w=${width} h=${height}",
             )
-            val width = CURSOR_WIDTH_PX
+            val arrowWidth = CURSOR_WIDTH_PX
             val path = Path().apply {
                 moveTo(0f, 0f)
-                lineTo(width - ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
+                lineTo(arrowWidth - ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
                 lineTo(ARROW_SIDE_INSET_PX, ARROW_BASE_HEIGHT_PX)
                 close()
             }
