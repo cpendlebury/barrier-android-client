@@ -596,7 +596,7 @@ class BarrierAccessibilityService : AccessibilityService() {
          * duration with `IllegalArgumentException: Duration must be positive`, so
          * a zero-length tap crashed the app on the first click. Keep this above 0.
          */
-        private const val TAP_DURATION_MS = 10L
+        private const val TAP_DURATION_MS = 30L
         private const val SEGMENT_DURATION_MS = 10L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
