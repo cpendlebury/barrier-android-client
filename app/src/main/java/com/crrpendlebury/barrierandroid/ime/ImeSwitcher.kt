@@ -13,17 +13,24 @@ import android.view.inputmethod.InputMethodManager
  */
 object ImeSwitcher {
 
-    private const val IME_ID = "com.crrpendlebury.barrierandroid/.ime.BarrierIME"
-
-    fun isOursEnabled(context: Context): Boolean {
+    /** Finds the BarrierIME in the enabled list, or null if not enabled. */
+    private fun findOurs(context: Context): android.view.inputmethod.InputMethodInfo? {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            ?: return false
-        return imm.enabledInputMethodList.any { it.id == IME_ID }
+            ?: return null
+        return imm.enabledInputMethodList.firstOrNull {
+            it.id.contains("BarrierIME") || it.id.contains("barrierandroid.ime")
+        }
     }
+
+    fun isOursEnabled(context: Context): Boolean = findOurs(context) != null
+
+    /** The full component ID for setInputMethod, or null if not enabled. */
+    private fun oursId(context: Context): String? = findOurs(context)?.id
 
     /** Switch to the Barrier IME if it is enabled. Tries multiple token sources. */
     fun useOurs(context: Context) {
-        if (!isOursEnabled(context)) {
+        val id = oursId(context)
+        if (id == null) {
             BarrierIME.log(context, "ImeSwitcher.useOurs: BarrierIME not enabled")
             return
         }
@@ -35,13 +42,13 @@ object ImeSwitcher {
             return
         }
         val switched = runCatching {
-            imm.setInputMethod(token, IME_ID)
+            imm.setInputMethod(token, id)
             true
         }.getOrDefault(false)
         if (switched) {
-            BarrierIME.log(context, "ImeSwitcher.useOurs: switched to BarrierIME via setInputMethod")
+            BarrierIME.log(context, "ImeSwitcher.useOurs: setInputMethod($id) succeeded")
         } else {
-            BarrierIME.log(context, "ImeSwitcher.useOurs: setInputMethod failed, showing picker")
+            BarrierIME.log(context, "ImeSwitcher.useOurs: setInputMethod($id) failed, showing picker")
             showPicker(context)
         }
     }

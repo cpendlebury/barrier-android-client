@@ -397,8 +397,9 @@ class MainActivity : ComponentActivity() {
     private fun isBarrierImeEnabled(): Boolean {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
             ?: return false
-        val expected = "com.crrpendlebury.barrierandroid/.ime.BarrierIME"
-        return imm.enabledInputMethodList.any { it.id == expected }
+        return imm.enabledInputMethodList.any {
+            it.id.contains("BarrierIME") || it.id.contains("barrierandroid.ime")
+        }
     }
 
     private fun updateImeStatus() {
