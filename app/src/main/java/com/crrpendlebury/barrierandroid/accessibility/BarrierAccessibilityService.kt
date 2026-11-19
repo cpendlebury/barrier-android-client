@@ -213,9 +213,11 @@ class BarrierAccessibilityService : AccessibilityService() {
                 downY = y
                 dragMoved = false
                 buttonDown = true
-                // Defer the click to up: node click (reliable for Files folders)
-                // primary, gesture tap fallback. No gesture on down.
-                false
+                // Tap on press (original behaviour): picks up items in games and
+                // activates buttons/checkboxes. Node click on up (below) handles
+                // Files folders where the gesture tap does not register.
+                val gesture = tapGesture(x, y)
+                dispatchGesture(gesture, gestureResultCallback, handler)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (!buttonDown) {
@@ -247,11 +249,48 @@ class BarrierAccessibilityService : AccessibilityService() {
                     dragStroke = null
                     gestureInFlight = false
                 } else {
-                    // Tap: node click primary (opens Files folders etc.),
-                    // gesture tap fallback for apps without accessibility nodes.
-                    val clicked = clickNodeAt(x, y)
-                    if (!clicked) {
-                        dispatchGesture(tapGesture(x, y), gestureResultCallback, handler)
+                    // Tap: the gesture tap already fired on down. Try node click
+                    // only for non-control elements (folders, files, list items)
+                    // where the gesture tap may not have registered. Skip
+                    // buttons/checkboxes/switches to avoid double activation.
+                    val roots = mutableListOf<AccessibilityNodeInfo>()
+                    rootInActiveWindow?.let { roots.add(it) }
+                    for (w in windows) { val r = w.root ?: continue; if (roots.none { it == r }) roots.add(r) }
+                    var best: AccessibilityNodeInfo? = null
+                    var bestDepth = -1
+                    var bestArea = Long.MAX_VALUE
+                    fun walk(node: AccessibilityNodeInfo, depth: Int) {
+                        val rect = android.graphics.Rect()
+                        node.getBoundsInScreen(rect)
+                        if (!rect.contains(x.toInt(), y.toInt())) return
+                        if (node.isClickable) {
+                            val cls = node.className?.toString() ?: ""
+                            val isControl = cls.contains("Button") || cls.contains("CheckBox") ||
+                                cls.contains("Switch") || cls.contains("ToggleButton") ||
+                                cls.contains("RadioButton")
+                            if (!isControl) {
+                                val area = rect.width().toLong() * rect.height().toLong()
+                                if (depth > bestDepth || (depth == bestDepth && area < bestArea)) {
+                                    best = node; bestDepth = depth; bestArea = area
+                                }
+                            }
+                        }
+                        for (i in 0 until node.childCount) {
+                            val c = node.getChild(i) ?: continue
+                            walk(c, depth + 1)
+                        }
+                    }
+                    for (r in roots) walk(r, 0)
+                    val target = best
+                    if (target != null) {
+                        val rect = android.graphics.Rect()
+                        target.getBoundsInScreen(rect)
+                        val screenArea = resources.displayMetrics.widthPixels.toLong() * resources.displayMetrics.heightPixels.toLong()
+                        val nodeArea = rect.width().toLong() * rect.height().toLong()
+                        if (nodeArea <= screenArea / 5) {
+                            target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            BarrierAccessibilityService.log(this, "tap node-click (non-control) x=$x y=$y")
+                        }
                     }
                 }
                 downX = 0f
