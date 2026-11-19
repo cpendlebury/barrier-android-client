@@ -172,44 +172,6 @@ class BarrierAccessibilityService : AccessibilityService() {
      * not a gesture source. Button-down, movement, and scroll show the cursor;
      * button-up hides it.
      */
-    /**
-     * Files-only experiment. Stock Files (documentsui) shows the press but does not
-     * open folders from accessibility gestures. While it is foreground, a press sends
-     * no gesture; the release sends ACTION_CLICK to the deepest clickable node under
-     * the pointer. Other apps are unaffected.
-     */
-    private var filesPress = false
-    private var filesPressMoved = false
-    private var downX = 0f
-    private var downY = 0f
-
-    private fun clickNodeAt(x: Float, y: Float): Boolean {
-        val root = rootInActiveWindow ?: return false
-        var best: AccessibilityNodeInfo? = null
-        var bestDepth = -1
-        fun walk(node: AccessibilityNodeInfo, depth: Int) {
-            val rect = android.graphics.Rect()
-            node.getBoundsInScreen(rect)
-            if (!rect.contains(x.toInt(), y.toInt())) return
-            if (node.isClickable && depth > bestDepth) {
-                best = node
-                bestDepth = depth
-            }
-            for (i in 0 until node.childCount) {
-                val child = node.getChild(i) ?: continue
-                walk(child, depth + 1)
-            }
-        }
-        walk(root, 0)
-        return best?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-    }
-
-    private fun distance(x1: Float, y1: Float, x2: Float, y2: Float): Float {
-        val dx = x2 - x1
-        val dy = y2 - y1
-        return kotlin.math.sqrt(dx * dx + dy * dy)
-    }
-
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
         // Mirror injected pointer motion onto the visible cursor overlay. The
         // overlay is a render surface only; dispatchGesture below remains the
@@ -238,38 +200,9 @@ class BarrierAccessibilityService : AccessibilityService() {
         lastY = y
 
         return when (action) {
-            MotionEvent.ACTION_DOWN -> {
-                filesPress = rootInActiveWindow?.packageName == FILES_PACKAGE
-                filesPressMoved = false
-                downX = x
-                downY = y
-                if (filesPress) {
-                    log(this, "files press x=$x y=$y (gesture and drag skipped)")
-                    false
-                } else {
-                    startDrag(x, y)
-                }
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (filesPress) {
-                    if (distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) filesPressMoved = true
-                    false
-                } else {
-                    continueDrag(x, y)
-                }
-            }
-            MotionEvent.ACTION_UP -> {
-                if (filesPress) {
-                    filesPress = false
-                    if (!filesPressMoved) {
-                        val clicked = clickNodeAt(x, y)
-                        log(this, "files click x=$x y=$y clicked=$clicked")
-                    }
-                    false
-                } else {
-                    endDrag(x, y)
-                }
-            }
+            MotionEvent.ACTION_DOWN -> startDrag(x, y)
+            MotionEvent.ACTION_MOVE -> continueDrag(x, y)
+            MotionEvent.ACTION_UP -> endDrag(x, y)
             MotionEvent.ACTION_SCROLL -> {
                 val gesture = scrollGesture(x, y)
                 dispatchGesture(gesture, gestureResultCallback, handler)
@@ -657,8 +590,6 @@ class BarrierAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val DISPLAY_ID = 0
-        private const val FILES_PACKAGE = "com.android.documentsui"
-        private const val TAP_MOVE_THRESHOLD_PX = 8f
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
         /**
          * Duration of a tap gesture. `StrokeDescription` rejects a non-positive
