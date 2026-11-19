@@ -57,6 +57,9 @@ import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
 import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
+import com.crrpendlebury.barrierandroid.ime.BarrierIME
+import com.crrpendlebury.barrierandroid.ime.BarrierKeyMap
+import com.crrpendlebury.barrierandroid.ime.ImeSwitcher
 
 class MainActivity : ComponentActivity() {
 
@@ -79,6 +82,11 @@ class MainActivity : ComponentActivity() {
                 updateStatus(state)
                 if (state == BarrierClientState.CONNECTED) {
                     errorTextView.text = ""
+                    // Switch to the Barrier IME so server keystrokes can be
+                    // delivered into the focused field. No-op if not enabled.
+                    ImeSwitcher.useOurs(this@MainActivity)
+                } else if (state == BarrierClientState.DISCONNECTED) {
+                    ImeSwitcher.restore(this@MainActivity, leaving = true)
                 }
             }
         }
@@ -117,11 +125,11 @@ class MainActivity : ComponentActivity() {
                     // Screen tracking is handled separately (Phase 3 hardening).
                 }
 
-                is BarrierInputEvent.KeyDown -> service.injectKey(event.keyId, KeyEvent.ACTION_DOWN)
+                is BarrierInputEvent.KeyDown -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN)
 
-                is BarrierInputEvent.KeyRepeat -> service.injectKey(event.keyId, KeyEvent.ACTION_DOWN)
+                is BarrierInputEvent.KeyRepeat -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN)
 
-                is BarrierInputEvent.KeyUp -> service.injectKey(event.keyId, KeyEvent.ACTION_UP)
+                is BarrierInputEvent.KeyUp -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_UP)
             }
         }
 
@@ -351,5 +359,60 @@ class MainActivity : ComponentActivity() {
         val enabled = BarrierAccessibilityService.isEnabled(this)
         accessibilityStatusTextView.text = "Accessibility service: " + if (enabled) "enabled" else "disabled"
         openAccessibilitySettingsButton.visibility = if (enabled) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * Routes a Barrier key event to the Barrier IME when it is the active input
+     * method, falling back to the accessibility service's global-action path
+     * (Back/Home/Recents) otherwise. Modifier state is tracked from the Barrier
+     * modifier mask and applied to the committed/sent key.
+     */
+    private fun handleBarrierKey(keyId: Int, modifierMask: Int, action: Int) {
+        val ime = BarrierIME.instance
+        val conn = ime?.connection
+        val isDown = action == KeyEvent.ACTION_DOWN
+
+        // Back key (Escape / Alt+Left): global Back action, regardless of IME.
+        if (BarrierKeyMap.isBackKey(keyId, modifierMask)) {
+            if (isDown) {
+                BarrierAccessibilityService.instance?.performGlobalAction(
+                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK,
+                )
+            }
+            return
+        }
+
+        // Modifier keys: update tracked state, also forward as a key event.
+        if (BarrierKeyMap.isModifier(keyId)) {
+            ime?.updateModifiers(modifierMask)
+            val code = BarrierKeyMap.keyCodeFor(keyId)
+            if (code != 0 && conn != null) {
+                ime?.sendKey(code, ime.metaState, isDown)
+            }
+            if (!isDown) ime?.clearModifiers()
+            return
+        }
+
+        if (conn == null) {
+            // No focused editable field / IME not active: fall back to the
+            // accessibility service's (limited) key path.
+            BarrierAccessibilityService.instance?.injectKey(keyId, action)
+            return
+        }
+
+        ime?.updateModifiers(modifierMask)
+        val shift = (modifierMask and 0x0001) != 0
+
+        if (BarrierKeyMap.isPrintable(keyId)) {
+            if (isDown) {
+                BarrierKeyMap.charFor(keyId, shift)?.let { ime?.commitText(it.toString()) }
+            }
+        } else {
+            val code = BarrierKeyMap.keyCodeFor(keyId)
+            if (code != 0) {
+                ime?.sendKey(code, ime?.metaState ?: 0, isDown)
+            }
+        }
+        if (!isDown) ime?.clearModifiers()
     }
 }

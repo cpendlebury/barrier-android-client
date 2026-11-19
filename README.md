@@ -14,7 +14,7 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 ## Current status
 
-The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible.
+The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is now possible when the Barrier keyboard (IME) is enabled and selected; otherwise keystrokes fall back to the accessibility service's limited global-action path.
 
 **Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with SHA-256 fingerprint pinning, no double-connect); the visible cursor overlay has since been visually confirmed on a real device, driven by server input over that connection. Injection uses discrete accessibility gestures (not a real system pointer); the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
 
