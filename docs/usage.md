@@ -46,6 +46,8 @@ The status text is refreshed in `onCreate` and `onResume`.
 
 ## Mouse movement
 
+Known issue: in the stock Android Files app, tapping a folder does not open it. Use another file manager such as Fossify File Manager (see [troubleshooting](troubleshooting.md#stock-files-app-does-not-open-folders)).
+
 Mouse movement does not send any gesture to the phone. The injected position is mirrored onto a visible cursor overlay (a classic pointer drawn in a translucent window hosted in the accessibility service). The cursor follows movement, hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Clicks and scrolls land at the tracked position. Movement strokes were removed because they caused phantom keystrokes on on-screen keyboards and accidental scrolls.
 
 ## What a real session still needs
