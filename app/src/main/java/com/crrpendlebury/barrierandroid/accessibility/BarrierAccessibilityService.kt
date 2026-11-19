@@ -207,13 +207,17 @@ class BarrierAccessibilityService : AccessibilityService() {
 
         return when (action) {
             MotionEvent.ACTION_DOWN -> {
-                // Defer the actual click/drag decision to move/up so a tap
-                // (node click primary, gesture tap fallback) and a drag (continuing
-                // stroke) are not conflated. Only track position here.
+                // Original behaviour: dispatch a tap gesture immediately. This is
+                // the proven path for clicks (buttons, checkboxes, game
+                // elements). Node-click is NOT used here because ACTION_CLICK on
+                // accessibility nodes triggered heavier navigation than a normal
+                // tap ("heavy clicks on everything"). The Files-folder case is
+                // handled by the longer tap duration below.
                 downX = x
                 downY = y
                 dragMoved = false
-                false
+                val gesture = tapGesture(x, y)
+                dispatchGesture(gesture, gestureResultCallback, handler)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (!dragMoved && distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) {
@@ -233,7 +237,7 @@ class BarrierAccessibilityService : AccessibilityService() {
                 if (dragMoved) {
                     drag.onMove(x, y)?.let { segment -> dispatchSegment(segment) }
                 }
-                true
+                false
             }
             MotionEvent.ACTION_UP -> {
                 if (dragMoved) {
@@ -241,17 +245,13 @@ class BarrierAccessibilityService : AccessibilityService() {
                     drag.onUp(x, y)?.let { segment -> dispatchSegment(segment) }
                     dragStroke = null
                     gestureInFlight = false
-                } else {
-                    // Tap: node click primary, gesture tap fallback.
-                    val clicked = clickNodeAt(x, y)
-                    if (!clicked) {
-                        dispatchGesture(tapGesture(x, y), gestureResultCallback, handler)
-                    }
                 }
+                // Tap was already dispatched on ACTION_DOWN; nothing extra here.
                 downX = 0f
                 downY = 0f
                 dragMoved = false
-                true
+                hideCursor()
+                false
             }
             MotionEvent.ACTION_SCROLL -> {
                 val gesture = scrollGesture(x, y)
