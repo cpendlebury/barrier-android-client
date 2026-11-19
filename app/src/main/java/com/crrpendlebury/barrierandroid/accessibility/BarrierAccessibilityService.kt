@@ -129,8 +129,6 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var downX = 0f
     private var downY = 0f
     private var dragMoved = false
-    /** True while a mouse button is held (between ACTION_DOWN and ACTION_UP). */
-    private var buttonDown = false
     private val TAP_MOVE_THRESHOLD_PX = 8f
 
     /**
@@ -212,47 +210,24 @@ class BarrierAccessibilityService : AccessibilityService() {
                 downX = x
                 downY = y
                 dragMoved = false
-                buttonDown = true
-                // Tap on press (original behaviour): picks up items in games and
-                // activates buttons/checkboxes. Node click on up (below) handles
-                // Files folders where the gesture tap does not register.
-                val gesture = tapGesture(x, y)
-                dispatchGesture(gesture, gestureResultCallback, handler)
+                startDrag(x, y)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!buttonDown) {
-                    false
-                } else if (!dragMoved && distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) {
+                if (!dragMoved && distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) {
                     dragMoved = true
-                    drag.onDown(downX, downY)
-                    val opening = Path().apply { moveTo(downX, downY); lineTo(x, y) }
-                    val stroke = GestureDescription.StrokeDescription(opening, 0L, SEGMENT_DURATION_MS, true)
-                    dragStroke = stroke
-                    gestureInFlight = true
-                    dispatchGesture(
-                        GestureDescription.Builder().addStroke(stroke).setDisplayId(DISPLAY_ID).build(),
-                        gestureResultCallback,
-                        handler,
-                    )
-                    true
-                } else if (dragMoved) {
-                    drag.onMove(x, y)?.let { segment -> dispatchSegment(segment) }
-                    true
-                } else {
-                    false
                 }
+                continueDrag(x, y)
             }
             MotionEvent.ACTION_UP -> {
-                buttonDown = false
                 if (dragMoved) {
-                    drag.onUp(x, y)?.let { segment -> dispatchSegment(segment) }
-                    dragStroke = null
-                    gestureInFlight = false
+                    val result = endDrag(x, y)
+                    downX = 0f
+                    downY = 0f
+                    dragMoved = false
+                    result
                 } else {
-                    // Tap: the gesture tap already fired on down. Try node click
-                    // only for non-control elements (folders, files, list items)
-                    // where the gesture tap may not have registered. Skip
-                    // buttons/checkboxes/switches to avoid double activation.
+                    // Tap (no drag): try node click for non-control elements
+                    // (Files folders), gesture tap already fired on down.
                     val roots = mutableListOf<AccessibilityNodeInfo>()
                     rootInActiveWindow?.let { roots.add(it) }
                     for (w in windows) { val r = w.root ?: continue; if (roots.none { it == r }) roots.add(r) }
@@ -288,15 +263,16 @@ class BarrierAccessibilityService : AccessibilityService() {
                         val screenArea = resources.displayMetrics.widthPixels.toLong() * resources.displayMetrics.heightPixels.toLong()
                         val nodeArea = rect.width().toLong() * rect.height().toLong()
                         if (nodeArea <= screenArea / 5) {
-                            target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            BarrierAccessibilityService.log(this, "tap node-click (non-control) x=$x y=$y")
+                            val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            BarrierAccessibilityService.log(this, "tap node-click (non-control) x=$x y=$y clicked=$clicked")
                         }
                     }
+                    downX = 0f
+                    downY = 0f
+                    dragMoved = false
+                    hideCursor()
+                    false
                 }
-                downX = 0f
-                downY = 0f
-                dragMoved = false
-                true
             }
             MotionEvent.ACTION_SCROLL -> {
                 val gesture = scrollGesture(x, y)
@@ -307,59 +283,6 @@ class BarrierAccessibilityService : AccessibilityService() {
                 dispatchGesture(gesture, gestureResultCallback, handler)
             }
         }
-    }
-
-    /**
-     * Performs ACTION_CLICK on the deepest clickable accessibility node under
-     * (x, y). Returns true when a node was found and clicked. Used as the
-     * primary tap mechanism for standard apps (Files, settings, etc.) where a
-     * gesture tap may not register; gesture tap is the fallback when no
-     * clickable node is found (games, custom views).
-     */
-    fun clickNodeAt(x: Float, y: Float): Boolean {
-        val roots = mutableListOf<AccessibilityNodeInfo>()
-        rootInActiveWindow?.let { roots.add(it) }
-        for (window in windows) {
-            val root = window.root ?: continue
-            if (roots.none { it == root }) roots.add(root)
-        }
-        var best: AccessibilityNodeInfo? = null
-        var bestDepth = -1
-        var bestArea = Long.MAX_VALUE
-        fun walk(node: AccessibilityNodeInfo, depth: Int) {
-            val rect = android.graphics.Rect()
-            node.getBoundsInScreen(rect)
-            if (!rect.contains(x.toInt(), y.toInt())) return
-            if (node.isClickable) {
-                val area = rect.width().toLong() * rect.height().toLong()
-                if (depth > bestDepth || (depth == bestDepth && area < bestArea)) {
-                    best = node
-                    bestDepth = depth
-                    bestArea = area
-                }
-            }
-            for (i in 0 until node.childCount) {
-                val child = node.getChild(i) ?: continue
-                walk(child, depth + 1)
-            }
-        }
-        for (root in roots) walk(root, 0)
-        val target = best
-        if (target == null) {
-            BarrierAccessibilityService.log(this, "clickNodeAt x=$x y=$y no clickable node")
-            return false
-        }
-        val rect = android.graphics.Rect()
-        target.getBoundsInScreen(rect)
-        val screenArea = resources.displayMetrics.widthPixels.toLong() * resources.displayMetrics.heightPixels.toLong()
-        val nodeArea = rect.width().toLong() * rect.height().toLong()
-        if (nodeArea > screenArea / 5) {
-            BarrierAccessibilityService.log(this, "clickNodeAt x=$x y=$y node too large (${nodeArea}px, skipping)")
-            return false
-        }
-        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        BarrierAccessibilityService.log(this, "clickNodeAt x=$x y=$y clicked=$clicked")
-        return clicked
     }
 
     private fun distance(x1: Float, y1: Float, x2: Float, y2: Float): Float {
@@ -750,7 +673,7 @@ class BarrierAccessibilityService : AccessibilityService() {
          * duration with `IllegalArgumentException: Duration must be positive`, so
          * a zero-length tap crashed the app on the first click. Keep this above 0.
          */
-        private const val TAP_DURATION_MS = 100L
+        private const val TAP_DURATION_MS = 10L
         private const val SEGMENT_DURATION_MS = 10L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
