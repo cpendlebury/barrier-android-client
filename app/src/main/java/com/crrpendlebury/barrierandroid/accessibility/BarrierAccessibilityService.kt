@@ -245,7 +245,7 @@ class BarrierAccessibilityService : AccessibilityService() {
         // Opening stroke: a zero-duration-ish tap at the press point, marked
         // willContinue so moves can extend it.
         val path = Path().apply { moveTo(x, y) }
-        val stroke = GestureDescription.StrokeDescription(path, 0L, SEGMENT_DURATION_MS, true)
+        val stroke = GestureDescription.StrokeDescription(path, 0L, TAP_DURATION_MS, true)
         val gesture = GestureDescription.Builder()
             .addStroke(stroke)
             .setDisplayId(DISPLAY_ID)
