@@ -1,6 +1,6 @@
 # Configuration
 
-There is no settings screen beyond the three fields on the main activity. Nothing is persisted. Host, port, and client name are read once, when **Connect** is tapped, and passed to the foreground service via `PendingConnection`.
+There is no settings screen beyond the three fields on the main activity. The three fields persist: Host, Port, and Client name are saved to `SharedPreferences` (`barrier_settings`) on every text change and on pause via synchronous `commit()`, restored when the activity is recreated, and passed to the foreground service via `PendingConnection` when **Connect** is tapped. A previously accepted server TLS fingerprint is also persisted (key `server_fingerprint`) and reused for later connects and reconnects.
 
 ## Fields
 
@@ -29,7 +29,7 @@ Option ids are the Barrier 4-character codes packed big-endian, from `src/lib/ba
 | Code | Constant | Stored as | Changes behaviour? |
 |------|----------|-----------|--------------------|
 | `CLPS` | `OPTION_CLIPBOARD_SHARING` (`0x434C5053`) | `clipboardSharingEnabled` (`value != 0`) | No. Grab and data handlers do not check it |
-| `HART` | `OPTION_HEARTBEAT` (`0x48415254`) | `heartbeatSeconds` | No. Keepalive stays 3000 ms |
+| `HART` | `OPTION_HEARTBEAT` (`0x48415254`) | `heartbeatSeconds` | Yes — `applyOptions` sets the keepalive interval from `HART` when the value is > 0; the keepalive timer uses the requested interval. |
 | `SSVR` | `OPTION_SCREEN_SAVER_SYNC` (`0x53535652`) | `screenSaverSyncEnabled` (`value != 0`) | No. `CSEC` only updates `screenSaverActive` |
 
 `OPTION_RELATIVE_MOUSE_MOVES` (`MDLT`, `0x4D444C54`) is declared and unused. Every other id is kept in `appliedOptions` and ignored.

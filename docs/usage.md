@@ -1,6 +1,6 @@
 # Using the app
 
-The screen is a small form. The app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible. See [Status and limitations](limitations.md) for details.
+The screen is a small form. The app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional (press/move/release drags via continuing gestures; keystrokes via the Barrier IME when enabled). Typing individual keystrokes is now possible through the Barrier IME when enabled and selected; otherwise keystrokes fall back to the accessibility service's limited global-action path. See [Status and limitations](limitations.md) for details.
 
 ## Screen
 

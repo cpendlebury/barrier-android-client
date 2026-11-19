@@ -14,21 +14,21 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 ## Current status
 
-The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is now possible when the Barrier keyboard (IME) is enabled and selected; otherwise keystrokes fall back to the accessibility service's limited global-action path.
+The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional (press/move/release drags via continuing accessibility gestures; keystrokes via the Barrier IME when enabled). Typing individual keystrokes is now possible when the Barrier keyboard (IME) is enabled and selected; otherwise keystrokes fall back to the accessibility service's limited global-action path.
 
-**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with SHA-256 fingerprint pinning, no double-connect); the visible cursor overlay has since been visually confirmed on a real device, driven by server input over that connection. Injection uses discrete accessibility gestures (not a real system pointer); the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
+**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone; the visible cursor overlay was visually confirmed on a real device over a live server connection (red-fill diagnostic → gravity `TOP or START` → white arrow; hosting settled on the service context). The socket transport was rewritten after that handshake (plain socket / SSL socket with SHA-256 fingerprint pinning, no double-connect); the TLS path was then exercised end to end over that connection. Injection uses discrete accessibility gestures (not a real system pointer), including press/move/release drags via continuing strokes; the overlay is a render surface, not a system pointer. Full input-injection behaviour (button hold/release, disconnect/screensaver hide, cursor size and position) still needs validation. See [Status and limitations](docs/limitations.md) for details.
 
 ## Features
 
 - **Protocol client** — full Barrier v1.6 handshake, keepalive, input events, clipboard, screensaver, options, reconnect
 - **TCP/TLS transport** — plain socket or TLS (server authenticated by SHA-256 fingerprint, Barrier's `ENCRYPTED_AUTHENTICATED`)
-- **Pointer injection** — discrete gestures via `dispatchGesture` (tap and scroll only; movement sends no gesture)
+- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, scroll, and press/move/release drags via continuing strokes; movement sends no gesture); visible cursor overlay mirrors injected position.
 - **Text injection** — `ACTION_SET_TEXT` on the focused editable field (clipboard push path)
 - **Navigation keys** — Back, Home, Recents via framework global actions
 - **Clipboard sync** — CCLP/DCLP round-trip via `ClipboardManager`
 - **Foreground service** — keeps the connection alive while backgrounded (Android 8+ compliant, wake lock held)
 - **Reconnect with backoff** — exponential backoff (1s → 30s) on server-initiated disconnect
-- **Screensaver/options handling** — tracks server screensaver state and applies options (CLPS, HART, SSVR, MDLT)
+- **Screensaver/options handling** — tracks server screensaver state and applies options (CLPS, HART applied; SSVR recorded; MDLT not read)
 - **UI wiring** — accessibility service status surfacing, error display, open-settings button, battery optimization prompt
 - **Barrier logo** — actual Barrier project logo as app icon and in-app image
 
@@ -63,12 +63,12 @@ See [Usage](docs/usage.md) for the full walkthrough.
 ## Known limitations
 
 - **No real system cursor**: `dispatchGesture` creates discrete gestures, not a system pointer; the visible cursor is an overlay window rendering a standard arrow. There is no public API for moving a real system cursor.
-- **No arbitrary key injection**: Barrier key IDs are not Android key codes. No public injection API exists on compileSdk 35.
+- **No arbitrary key injection via the accessibility path**: Barrier key IDs are not Android key codes and no public injection API exists on compileSdk 35; server keystrokes are delivered through the Barrier IME (`InputConnection.commitText` / `sendKey`).
 - **TLS is Barrier's TLS**: the server is authenticated by the SHA-256 fingerprint of its self-signed certificate, with trust on first use (Barrier's `ENCRYPTED_AUTHENTICATED`).
 - **No plaintext toggle**: TLS is always attempted. No UI switch for plaintext mode.
-- **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is stored but not read.
+- **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is declared but not read.
 - **File transfer / drag**: `DFTR`/`DDRG` packets are decoded and ignored.
-- **On-device validation**: the connection handshake and the visible cursor overlay have both been tested on a real device against a live Barrier server (cursor input arrives via server-driven mouse events); the TLS transport rewrite predates that validation. Full input-injection behaviour (button hold/release, disconnect/screensaver hide, cursor size and position) still needs validation.
+- **On-device validation**: the connection handshake and the visible cursor overlay have been tested on a real device against a live Barrier server; the TLS transport rewrite predates that validation. Since the 2026-11-20 drag rework, the drag-driven overlay path needs a fresh retest; full input-injection behaviour (button hold/release, disconnect/screensaver hide, cursor size and position) still needs validation.
 
 ## License
 
