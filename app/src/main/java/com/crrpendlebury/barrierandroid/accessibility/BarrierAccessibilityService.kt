@@ -77,9 +77,18 @@ class BarrierAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
 
     private val gestureResultCallback = object : AccessibilityService.GestureResultCallback() {
-        override fun onCompleted(gestureDescription: GestureDescription) = Unit
+        override fun onCompleted(gestureDescription: GestureDescription) {
+            gestureInFlight = false
+        }
 
-        override fun onCancelled(gestureDescription: GestureDescription) = Unit
+        override fun onCancelled(gestureDescription: GestureDescription) {
+            gestureInFlight = false
+            // A cancelled drag can no longer be continued; drop the stroke so
+            // the next press starts a fresh one instead of chaining onto a dead
+            // stroke.
+            isDragging = false
+            dragStroke = null
+        }
     }
 
     private var windowManager: WindowManager? = null
@@ -92,6 +101,21 @@ class BarrierAccessibilityService : AccessibilityService() {
      */
     private var lastX = 0f
     private var lastY = 0f
+
+    /**
+     * Drag state for hold-and-move. A button press starts a continuing stroke
+     * ([GestureDescription.StrokeDescription] with `willContinue = true`); moves
+     * append segments via `continueStroke`; release ends the stroke. This is the
+     * only way `dispatchGesture` can approximate a held-button drag, since it
+     * has no "button down across calls" concept. Mirrors Input Leaf's
+     * DragCoalescer approach.
+     */
+    private var isDragging = false
+    private var dragStroke: GestureDescription.StrokeDescription? = null
+    private var dragX = 0f
+    private var dragY = 0f
+    @Volatile
+    private var gestureInFlight = false
 
     /**
      * Dispatches a gesture for the requested pointer action.
@@ -129,44 +153,157 @@ class BarrierAccessibilityService : AccessibilityService() {
      * button-up hides it.
      */
     fun injectPointer(x: Float, y: Float, action: Int): Boolean {
-        val gesture = when (action) {
-            MotionEvent.ACTION_DOWN -> tapGesture(x, y)
-            MotionEvent.ACTION_UP -> {
-                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP lastX=$lastX lastY=$lastY")
-                hideCursor()
-                return false
-            }
-            MotionEvent.ACTION_MOVE -> {
-                lastX = x
-                lastY = y
-                logVerbose(this, "injectPointer ACTION_MOVE x=$x y=$y")
-                showCursor(x, y)
-                return false
-            }
-            MotionEvent.ACTION_SCROLL -> scrollGesture(x, y)
-            else -> tapGesture(x, y)
-        }
-        lastX = x
-        lastY = y
-        val dispatched = dispatchGesture(gesture, gestureResultCallback, handler)
-
         // Mirror injected pointer motion onto the visible cursor overlay. The
-        // overlay is a render surface only; dispatchGesture above remains the
-        // sole gesture-producing path. Button-down and scroll show the cursor
-        // here; movement returns early above, and button-up hides it.
+        // overlay is a render surface only; dispatchGesture below remains the
+        // sole gesture-producing path. Movement and button-up hide/show here.
         when (action) {
             MotionEvent.ACTION_DOWN -> {
                 BarrierAccessibilityService.log(this, "injectPointer ACTION_DOWN x=$x y=$y")
+                showCursor(x, y)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                logVerbose(this, "injectPointer ACTION_MOVE x=$x y=$y")
                 showCursor(x, y)
             }
             MotionEvent.ACTION_SCROLL -> {
                 logVerbose(this, "injectPointer ACTION_SCROLL x=$x y=$y")
                 showCursor(x, y)
             }
+            MotionEvent.ACTION_UP -> {
+                BarrierAccessibilityService.log(this, "injectPointer ACTION_UP lastX=$lastX lastY=$lastY")
+                hideCursor()
+            }
             else -> Unit
         }
+
+        lastX = x
+        lastY = y
+
+        return when (action) {
+            MotionEvent.ACTION_DOWN -> startDrag(x, y)
+            MotionEvent.ACTION_MOVE -> continueDrag(x, y)
+            MotionEvent.ACTION_UP -> endDrag(x, y)
+            MotionEvent.ACTION_SCROLL -> {
+                val gesture = scrollGesture(x, y)
+                dispatchGesture(gesture, gestureResultCallback, handler)
+            }
+            else -> {
+                val gesture = tapGesture(x, y)
+                dispatchGesture(gesture, gestureResultCallback, handler)
+            }
+        }
+    }
+
+    /**
+     * Begins a held-button drag: a continuing stroke starting at (x, y) with
+     * `willContinue = true`. Subsequent moves append segments via
+     * [continueDrag]; release ends it via [endDrag]. A tap with no movement
+     * becomes a short stroke from down to up at the same point.
+     */
+    private fun startDrag(x: Float, y: Float): Boolean {
+        if (gestureInFlight) {
+            // A previous gesture is still running; skip starting a new one.
+            // The position is tracked; the next event retries.
+            return false
+        }
+        val path = Path().apply { moveTo(x, y) }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, SEGMENT_DURATION_MS, true)
+        val gesture = GestureDescription.Builder()
+            .addStroke(stroke)
+            .setDisplayId(DISPLAY_ID)
+            .build()
+        gestureInFlight = true
+        dragStroke = stroke
+        isDragging = true
+        dragX = x
+        dragY = y
+        return dispatchGesture(gesture, gestureResultCallback, handler)
+    }
+
+    /**
+     * Appends a segment to the in-flight drag stroke. If a gesture is still
+     * running, the move is coalesced (position tracked, dispatch skipped) so
+     * segments never overlap.
+     */
+    private fun continueDrag(x: Float, y: Float): Boolean {
+        if (!isDragging) {
+            // No active drag: treat as movement only.
+            return false
+        }
+        val stroke = dragStroke ?: return false
+        // Capture the previous origin before overwriting.
+        val fromX = dragX
+        val fromY = dragY
+        // Always track the latest position, even when coalescing.
+        dragX = x
+        dragY = y
+        if (gestureInFlight) {
+            // Coalesce: skip dispatch; position is tracked above.
+            return false
+        }
+        val segPath = Path().apply {
+            moveTo(fromX, fromY)
+            lineTo(x, y)
+        }
+        val newStroke = try {
+            stroke.continueStroke(segPath, 0L, SEGMENT_DURATION_MS, true)
+        } catch (t: Throwable) {
+            BarrierAccessibilityService.log(this, "drag continueStroke failed ${t.javaClass.simpleName}: ${t.message}")
+            return false
+        }
+        gestureInFlight = true
+        dragStroke = newStroke
+        val gesture = GestureDescription.Builder()
+            .addStroke(newStroke)
+            .setDisplayId(DISPLAY_ID)
+            .build()
+        dragX = x
+        dragY = y
+        return dispatchGesture(gesture, gestureResultCallback, handler)
+    }
+
+    /**
+     * Ends the in-flight drag stroke. Dispatches the final segment with
+     * `willContinue = false` so the framework releases the gesture.
+     */
+    private fun endDrag(x: Float, y: Float): Boolean {
+        if (!isDragging) {
+            hideCursor()
+            return false
+        }
+        val stroke = dragStroke
+        isDragging = false
+        dragStroke = null
+        if (stroke == null) {
+            hideCursor()
+            return false
+        }
+        val fromX = dragX
+        val fromY = dragY
+        val segPath = Path().apply {
+            moveTo(fromX, fromY)
+            lineTo(x, y)
+        }
+        val finalStroke = try {
+            stroke.continueStroke(segPath, 0L, SEGMENT_DURATION_MS, false)
+        } catch (t: Throwable) {
+            BarrierAccessibilityService.log(this, "drag end continueStroke failed ${t.javaClass.simpleName}: ${t.message}")
+            hideCursor()
+            return false
+        }
+        dragX = x
+        dragY = y
+        gestureInFlight = true
+        val gesture = GestureDescription.Builder()
+            .addStroke(finalStroke)
+            .setDisplayId(DISPLAY_ID)
+            .build()
+        val dispatched = dispatchGesture(gesture, gestureResultCallback, handler)
+        hideCursor()
         return dispatched
     }
+
+    // (drag origin is tracked in dragX/dragY)
 
     private fun tapGesture(x: Float, y: Float): GestureDescription {
         val path = Path().apply { moveTo(x, y) }
@@ -492,6 +629,7 @@ class BarrierAccessibilityService : AccessibilityService() {
          * a zero-length tap crashed the app on the first click. Keep this above 0.
          */
         private const val TAP_DURATION_MS = 10L
+        private const val SEGMENT_DURATION_MS = 10L
         private const val SCROLL_STROKE_DURATION_MS = 100L
         private const val SCROLL_DISTANCE_PX = 200f
         private val CURSOR_WINDOW_MARGIN_PX = 4000f
