@@ -88,10 +88,15 @@ class MainActivity : ComponentActivity() {
                     if (!isBarrierImeEnabled()) {
                         errorTextView.text = "Barrier keyboard not enabled; keystrokes will not be delivered. Enable it in keyboard settings."
                         Toast.makeText(this@MainActivity, "Enable the Barrier keyboard in keyboard settings.", Toast.LENGTH_LONG).show()
+                    } else {
+                        // Switch to the Barrier IME so server keystrokes can be
+                        // delivered into the focused field.
+                        ImeSwitcher.useOurs(this@MainActivity)
+                        // If the IME still isn't bound, open the picker.
+                        if (BarrierIME.instance == null) {
+                            ImeSwitcher.showPicker(this@MainActivity)
+                        }
                     }
-                    // Switch to the Barrier IME so server keystrokes can be
-                    // delivered into the focused field. No-op if not enabled.
-                    ImeSwitcher.useOurs(this@MainActivity)
                 } else if (state == BarrierClientState.DISCONNECTED) {
                     ImeSwitcher.restore(this@MainActivity, leaving = true)
                 }
@@ -422,6 +427,10 @@ class MainActivity : ComponentActivity() {
             this,
             "handleBarrierKey keyId=0x${keyId.toString(16)} mask=$modifierMask action=$action ime=${ime != null} conn=${conn != null}",
         )
+        // If the IME is enabled but not bound, try to switch again.
+        if (ime == null && isBarrierImeEnabled()) {
+            ImeSwitcher.useOurs(this)
+        }
 
         // Back key (Escape / Alt+Left): global Back action, regardless of IME.
         if (BarrierKeyMap.isBackKey(keyId, modifierMask)) {
