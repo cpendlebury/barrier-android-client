@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var openAccessibilitySettingsButton: Button
     private lateinit var imeStatusTextView: TextView
     private lateinit var openKeyboardSettingsButton: Button
+    private lateinit var switchKeyboardButton: Button
     private lateinit var errorTextView: TextView
 
     private var lastPointerX = 0f
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
         openAccessibilitySettingsButton = findViewById(R.id.openAccessibilitySettingsButton)
         imeStatusTextView = findViewById(R.id.imeStatusTextView)
         openKeyboardSettingsButton = findViewById(R.id.openKeyboardSettingsButton)
+        switchKeyboardButton = findViewById(R.id.switchKeyboardButton)
         errorTextView = findViewById(R.id.errorTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
@@ -180,6 +182,12 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
+        }
+        switchKeyboardButton.setOnClickListener {
+            ImeSwitcher.useOurs(this)
+            if (!isBarrierImeEnabled()) {
+                Toast.makeText(this, "Enable the Barrier keyboard in keyboard settings first.", Toast.LENGTH_LONG).show()
+            }
         }
 
         // Restore from SharedPreferences (survives process death).
@@ -255,6 +263,16 @@ class MainActivity : ComponentActivity() {
         updateAccessibilityStatus()
         updateImeStatus()
         requestBatteryOptimizationExemption()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            // Retry switching now that the window token is available.
+            if (isBarrierImeEnabled()) {
+                ImeSwitcher.useOurs(this)
+            }
+        }
     }
 
     override fun onStop() {
@@ -399,6 +417,10 @@ class MainActivity : ComponentActivity() {
         val ime = BarrierIME.instance
         val conn = ime?.connection
         val isDown = action == KeyEvent.ACTION_DOWN
+        BarrierAccessibilityService.log(
+            this,
+            "handleBarrierKey keyId=0x${keyId.toString(16)} mask=$modifierMask action=$action ime=${ime != null} conn=${conn != null}",
+        )
 
         // Back key (Escape / Alt+Left): global Back action, regardless of IME.
         if (BarrierKeyMap.isBackKey(keyId, modifierMask)) {
