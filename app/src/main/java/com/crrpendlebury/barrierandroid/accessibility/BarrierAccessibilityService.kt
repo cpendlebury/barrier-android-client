@@ -129,6 +129,8 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var downX = 0f
     private var downY = 0f
     private var dragMoved = false
+    /** True while a mouse button is held (between ACTION_DOWN and ACTION_UP). */
+    private var buttonDown = false
     private val TAP_MOVE_THRESHOLD_PX = 8f
 
     /**
@@ -207,24 +209,26 @@ class BarrierAccessibilityService : AccessibilityService() {
 
         return when (action) {
             MotionEvent.ACTION_DOWN -> {
-                // Original behaviour: dispatch a tap gesture immediately. This is
-                // the proven path for clicks (buttons, checkboxes, game
-                // elements). Node-click is NOT used here because ACTION_CLICK on
-                // accessibility nodes triggered heavier navigation than a normal
-                // tap ("heavy clicks on everything"). The Files-folder case is
-                // handled by the longer tap duration below.
                 downX = x
                 downY = y
                 dragMoved = false
+                buttonDown = true
+                // Tap on press (original, proven behaviour).
                 val gesture = tapGesture(x, y)
                 dispatchGesture(gesture, gestureResultCallback, handler)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!dragMoved && distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) {
+                // Only start/continue a drag if a button is actually held.
+                // Without this guard, mouse movement alone (no button) triggered
+                // a drag stroke starting at (0,0), producing phantom taps.
+                if (!buttonDown) {
+                    false
+                } else if (!dragMoved && distance(downX, downY, x, y) > TAP_MOVE_THRESHOLD_PX) {
                     dragMoved = true
-                    // First significant move: start the drag stroke.
                     drag.onDown(downX, downY)
-                    val opening = Path().apply { moveTo(downX, downY) }
+                    // Opening segment is a line from down to first move, NOT a
+                    // stationary tap, so it does not register as an extra click.
+                    val opening = Path().apply { moveTo(downX, downY); lineTo(x, y) }
                     val stroke = GestureDescription.StrokeDescription(opening, 0L, SEGMENT_DURATION_MS, true)
                     dragStroke = stroke
                     gestureInFlight = true
@@ -233,20 +237,22 @@ class BarrierAccessibilityService : AccessibilityService() {
                         gestureResultCallback,
                         handler,
                     )
-                }
-                if (dragMoved) {
+                    true
+                } else if (dragMoved) {
                     drag.onMove(x, y)?.let { segment -> dispatchSegment(segment) }
+                    true
+                } else {
+                    false
                 }
-                false
             }
             MotionEvent.ACTION_UP -> {
+                buttonDown = false
                 if (dragMoved) {
                     // End the drag stroke.
                     drag.onUp(x, y)?.let { segment -> dispatchSegment(segment) }
                     dragStroke = null
                     gestureInFlight = false
                 }
-                // Tap was already dispatched on ACTION_DOWN; nothing extra here.
                 downX = 0f
                 downY = 0f
                 dragMoved = false
