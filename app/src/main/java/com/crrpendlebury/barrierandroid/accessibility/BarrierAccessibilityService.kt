@@ -54,21 +54,7 @@ import java.io.FileOutputStream
  */
 class BarrierAccessibilityService : AccessibilityService() {
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Diagnostic only: record click-related events so we can see whether an app
-        // received a click for an injected tap. No input behaviour depends on this.
-        val e = event ?: return
-        when (e.eventType) {
-            AccessibilityEvent.TYPE_VIEW_CLICKED,
-            AccessibilityEvent.TYPE_VIEW_LONG_CLICKED,
-            AccessibilityEvent.TYPE_VIEW_SELECTED -> {
-                log(
-                    this,
-                    "a11y event type=${AccessibilityEvent.eventTypeToString(e.eventType)} pkg=${e.packageName} class=${e.className}",
-                )
-            }
-        }
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?): Unit = Unit
 
     override fun onInterrupt() = Unit
 
@@ -92,14 +78,12 @@ class BarrierAccessibilityService : AccessibilityService() {
 
     private val gestureResultCallback = object : AccessibilityService.GestureResultCallback() {
         override fun onCompleted(gestureDescription: GestureDescription) {
-            log(this@BarrierAccessibilityService, "gesture completed strokes=${gestureDescription.strokeCount}")
             gestureInFlight = false
             // Chain the next segment if the drag is still active.
             drag.onSegmentDone()?.let { segment -> dispatchSegment(segment) }
         }
 
         override fun onCancelled(gestureDescription: GestureDescription) {
-            log(this@BarrierAccessibilityService, "gesture CANCELLED strokes=${gestureDescription.strokeCount}")
             gestureInFlight = false
             drag.onCancelled()
             synchronized(drag) { dragStroke = null }
