@@ -4,7 +4,6 @@ import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLSocket
@@ -17,11 +16,20 @@ import kotlinx.coroutines.launch
 /**
  * TCP transport implementing [BarrierTransport].
  *
- * Plain and TLS are both supported. TLS uses a trust-all [javax.net.ssl.TrustManager]
- * and disables hostname verification, which is what Barrier needs for its
- * self-signed server certificate on a LAN. This is not secure against a MITM
- * on an untrusted network; a future version should verify the server fingerprint
- * the way Barrier's GUI does.
+ * Plain and TLS are both supported. TLS authenticates the server the way
+ * Barrier's own client does: by the SHA-256 fingerprint of the server's leaf
+ * certificate, compared against a previously accepted (pinned) fingerprint
+ * (Barrier: `ConnectionSecurityLevel.ENCRYPTED_AUTHENTICATED`).
+ * `useTls == false` is Barrier's `PLAINTEXT` level.
+ *
+ * Hostname verification is deliberately not performed: Barrier's server cert is
+ * self-signed (CN=Barrier) and used on a LAN, and identity is established by
+ * the fingerprint pin rather than a DNS name, matching Barrier's client.
+ *
+ * [expectedServerFingerprint] is the accepted pin (lowercase hex, no
+ * separators), or `null` for trust on first use: the first observed fingerprint
+ * is accepted and recorded in [observedServerFingerprint] for the caller to
+ * persist. It may be updated before [connect] is called.
  *
  * The constructor's `host`, `port`, and `useTls` are retained for backward
  * compatibility. [connect] uses its own `useTls` argument and ignores the
@@ -36,7 +44,13 @@ class SocketBarrierTransport(
     private val scope: CoroutineScope,
     override var onPacket: ((BarrierPacket) -> Unit)? = null,
     override var onConnectionLost: (() -> Unit)? = null,
+    var expectedServerFingerprint: String? = null,
 ) : BarrierTransport {
+
+    /** SHA-256 fingerprint (lowercase hex, no separators) of the leaf cert
+     *  actually presented by the server in the most recent handshake, or null. */
+    var observedServerFingerprint: String? = null
+        private set
 
     override var state: TransportState = TransportState.DISCONNECTED
         private set
@@ -50,10 +64,22 @@ class SocketBarrierTransport(
         if (state != TransportState.DISCONNECTED) {
             return
         }
-        val newSocket = createSocket(host, useTls)
+        // Build the trust manager per connection so the pinned fingerprint
+        // (which may have been accepted/stored since the last connect) is
+        // honoured. Barrier's ENCRYPTED_AUTHENTICATED model pins the server
+        // leaf certificate by SHA-256 instead of trusting a CA chain.
+        val trustManager = if (useTls) {
+            BarrierServerTrustManager(expectedServerFingerprint)
+        } else {
+            null
+        }
+        val newSocket = createSocket(host, useTls, trustManager)
         newSocket.connect(InetSocketAddress(host, port))
         if (useTls) {
             (newSocket as SSLSocket).startHandshake()
+            observedServerFingerprint = trustManager?.observedFingerprint
+        } else {
+            observedServerFingerprint = null
         }
         socket = newSocket
         state = TransportState.CONNECTED
@@ -80,17 +106,21 @@ class SocketBarrierTransport(
 
     /**
      * Builds an unconnected socket. Plain for `useTls == false`, an
-     * unconnected [SSLSocket] with hostname verification disabled for
-     * `useTls == true`. The socket is connected by [connect] afterwards.
+     * unconnected [SSLSocket] with hostname verification disabled and the
+     * server pinned by [trustManager] for `useTls == true`. The socket is
+     * connected by [connect] afterwards.
      */
-    private fun createSocket(host: String, useTls: Boolean): Socket {
+    private fun createSocket(host: String, useTls: Boolean, trustManager: X509TrustManager?): Socket {
         if (!useTls) {
             return Socket()
         }
+        val tm = trustManager ?: throw IllegalStateException("TLS requires a trust manager")
         val sslContext = SSLContext.getInstance("TLS")
-        sslContext.init(null, trustAllCerts, SecureRandom())
+        sslContext.init(null, arrayOf(tm), SecureRandom())
         val sslSocket = sslContext.socketFactory.createSocket() as SSLSocket
         sslSocket.sslParameters = SSLParameters().apply {
+            // Barrier's server cert is self-signed and used on a LAN; identity
+            // is established by the fingerprint pin, not a DNS name.
             endpointIdentificationAlgorithm = null
         }
         return sslSocket
@@ -147,11 +177,6 @@ class SocketBarrierTransport(
         return true
     }
 
-    companion object {
-        private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-        })
-    }
+    // No companion trust-all manager: TLS authentication is performed by
+    // BarrierServerTrustManager (SHA-256 fingerprint pinning).
 }

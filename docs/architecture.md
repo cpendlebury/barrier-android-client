@@ -17,7 +17,7 @@ app/src/main/java/com/crrpendlebury/barrierandroid/
     ├── BarrierPacket.kt             # Encode/decode of payload bodies
     ├── PacketCodec.kt               # 4-byte big-endian length prefix
     ├── BarrierTransport.kt
-    ├── SocketBarrierTransport.kt    # Plain + TLS socket; TLS is trust-all, not Barrier fingerprint TLS
+    ├── SocketBarrierTransport.kt    # Plain + TLS socket; TLS pins server by SHA-256 fingerprint (Barrier fingerprint TLS)
     ├── BarrierModels.kt             # State, errors, input events, listener
     ├── BarrierCommand.kt
     └── BarrierConstants.kt
@@ -65,7 +65,7 @@ Barrier server
 
 Breaks on that path, in order:
 
-1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` with a trust-all `TrustManager` for TLS. `connect()` no longer double-connects. TLS is still not Barrier's fingerprint-verified TLS. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
+1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` whose server is pinned by SHA-256 fingerprint (Barrier's `ENCRYPTED_AUTHENTICATED`) for TLS. `connect()` no longer double-connects. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
 2. The accessibility service is now declared with meta-data. `injectPointer` now consults the motion action (tap, stroke, scroll) but `dispatchGesture` creates discrete gestures, not continuous pointer tracking. `injectKey` still does not match real server key ids. `injectText` replaces field contents. See [limitations](limitations.md).
 3. Reconnect wiring: the service's client listener forwards `DISCONNECTED` without stopping the service, so the client's reconnect loop now survives a server drop. The service is stopped by the activity's Disconnect button.
 

@@ -137,6 +137,24 @@ class BarrierClient(
         get() = state
 
     /**
+     * SHA-256 fingerprint (lowercase hex, no separators) of the server
+     * certificate actually presented during the most recent TLS handshake,
+     * or `null` when the connection was plaintext or no handshake has
+     * completed. Exposed so the host can persist an accepted pin.
+     */
+    val observedServerFingerprint: String?
+        get() = (transport as? SocketBarrierTransport)?.observedServerFingerprint
+
+    /**
+     * Updates the pinned server fingerprint on the underlying socket transport,
+     * so a fingerprint accepted after the first handshake is enforced on
+     * subsequent connects/reconnects within this client instance.
+     */
+    fun setExpectedServerFingerprint(fingerprint: String?) {
+        (transport as? SocketBarrierTransport)?.expectedServerFingerprint = fingerprint
+    }
+
+    /**
      * Records the endpoint and starts the handshake by sending hello.
      *
      * Does not notify [listener] of [BarrierClientState.CONNECTING] or

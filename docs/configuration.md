@@ -10,7 +10,7 @@ There is no settings screen beyond the three fields on the main activity. Nothin
 | Port | `24800` (`DEFAULT_BARRIER_PORT`) | Barrier's usual port. Non-numeric text falls back to 24800; `0` is kept |
 | Client name | `AndroidBarrierClient` (`DEFAULT_CLIENT_NAME`) | Would be the HelloBack name and must match a screen name on the server, case-sensitive, if a handshake ever ran |
 
-There is no TLS switch. The service hardcodes `useTls = true` in both the transport constructor and `connect()`. The transport does honour that flag when passed to `connect` — a plain `java.net.Socket` for `useTls == false`, an `SSLSocket` with a trust-all manager for `useTls == true` — but the UI always passes `true`, so plaintext is not reachable from the app. See [limitations](limitations.md).
+There is no TLS switch. The service hardcodes `useTls = true` in both the transport constructor and `connect()`. The transport does honour that flag when passed to `connect` — a plain `java.net.Socket` for `useTls == false`, an `SSLSocket` whose server is authenticated by SHA-256 fingerprint (Barrier: `ENCRYPTED_AUTHENTICATED`) for `useTls == true`. The fingerprint is accepted on first use and then pinned; the UI always passes `true`, so plaintext is not reachable from the app. See [limitations](limitations.md).
 
 ## Server side
 
@@ -18,7 +18,7 @@ A future working build would be configured like any other Barrier client:
 
 - Server listens on the port entered in the app (24800 unless changed).
 - A screen exists whose name matches the client name exactly.
-- Encryption must match whatever the client actually speaks; the client speaks TLS (via a trust-all manager, not Barrier's fingerprint verification) and plaintext at the transport layer, though the UI only ever requests TLS.
+- Encryption must match whatever the client actually speaks; the client speaks TLS (Barrier's self-signed certificate, authenticated by SHA-256 fingerprint pinning) and plaintext at the transport layer, though the UI only ever requests TLS.
 
 Screen dimensions are now set from `resources.displayMetrics` in the foreground service before connect, so `DINF` advertises the real device resolution.
 

@@ -33,7 +33,7 @@
 2. **Reconnect with exponential backoff**: 1s → 30s, user-initiated disconnect suppresses reconnect, service no longer cancels reconnect scope.
 3. **Screensaver + options handling**: CSEC → screenSaverActive + callback; DSOP → applyOptions (CLPS, HART, SSVR, MDLT) + callback; CROP → reset to defaults.
 4. **Options applied**: CLPS gates clipboard grab/data; HART sets keepalive interval; MDLT/SSVR stored.
-5. **Socket transport rewrite**: plain Socket for plaintext, SSLSocket with trust-all TrustManager for TLS. No double-connect. useTls parameter respected. onConnectionLost callback surfaces drops. Socket errors → BarrierError.ConnectionFailed.
+5. **Socket transport rewrite**: plain Socket for plaintext, SSLSocket whose server is pinned by SHA-256 fingerprint (Barrier `ENCRYPTED_AUTHENTICATED`) for TLS. Trust on first use: first observed fingerprint is accepted and persisted. No double-connect. useTls parameter respected. onConnectionLost callback surfaces drops. Socket errors → BarrierError.ConnectionFailed.
 6. **Error surfacing**: transport failures → BarrierError.ConnectionFailed via notifyError. Foreground service wraps connect in runCatching.
 7. **Foreground service compat**: SDK_INT guards for NotificationChannel (API 26) and startForeground 3-arg (API 29). PROPERTY_SPECIAL_USE_FGS_SUBTYPE for Android 14. Wake lock + WiFi lock. Battery optimization prompt.
 8. **Background survival**: removed stopService from onDestroy. Settings saved/restored via SharedPreferences (commit() + TextWatcher). Activity re-attaches listener to running service via BarrierForegroundService.instance.
@@ -60,7 +60,7 @@
 - `./gradlew :app:assembleDebug --offline` → **GREEN / SUCCESSFUL** (full APK built).
 
 ## Known issues / gotchas
-- Environment's android.jar (platforms/android-35) lacks SSLSocketFactory.createSSLSocket → TLS uses standard SSLSocket with trust-all manager (not Barrier's fingerprint-verified TLS).
+- Environment's android.jar (platforms/android-35) lacks SSLSocketFactory.createSSLSocket → TLS uses standard SSLSocket with a fingerprint-pinning TrustManager (Barrier's fingerprint-verified TLS, trust on first use).
 - Offline builds: use --offline; androidx.appcompat not cached.
 - Kotlin nested-class instantiation requires parens: `BarrierPacket.KeepAlivePacket()`, etc.
 - **Framework API finding**: public AccessibilityService dispatch surface in compileSdk 35 exposes only dispatchGesture and performGlobalAction. dispatchKeyEvent does not exist → discrete key injection not possible; global actions for back/home/recents only.

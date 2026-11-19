@@ -28,6 +28,7 @@ import com.crrpendlebury.barrierandroid.protocol.BarrierClientState
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
 import com.crrpendlebury.barrierandroid.protocol.SocketBarrierTransport
+import com.crrpendlebury.barrierandroid.protocol.BarrierServerTrustManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -248,15 +249,22 @@ class BarrierForegroundService : Service() {
 
     private fun startConnection(pending: PendingConnection) {
         stopClient()
+        // Barrier TLS: load any previously accepted server fingerprint so the
+        // transport can pin the server by SHA-256 (Barrier:
+        // ENCRYPTED_AUTHENTICATED). A null pin means trust on first use.
+        val prefs = getSharedPreferences("barrier_settings", Context.MODE_PRIVATE)
+        val savedFingerprint = prefs.getString("server_fingerprint", null)
+        val transport = SocketBarrierTransport(
+            host = pending.host,
+            port = pending.port,
+            useTls = true,
+            scope = serviceScope,
+            onPacket = null,
+            expectedServerFingerprint = savedFingerprint,
+        )
         val newClient = BarrierClient(
             clientName = pending.clientName,
-            transport = SocketBarrierTransport(
-                host = pending.host,
-                port = pending.port,
-                useTls = true,
-                scope = serviceScope,
-                onPacket = null,
-            ),
+            transport = transport,
             scope = serviceScope,
             listener = clientListener,
         ).also { newClient ->
@@ -286,6 +294,22 @@ class BarrierForegroundService : Service() {
                     serverPort = pending.port,
                     useTls = true,
                 )
+            }.onSuccess {
+                // Trust on first use: if no pin was stored yet, accept and
+                // persist the fingerprint presented by the server so subsequent
+                // connects pin against it (Barrier's accept-and-store flow).
+                if (savedFingerprint == null) {
+                    val observed = newClient.observedServerFingerprint
+                    if (observed != null) {
+                        prefs.edit()
+                            .putString("server_fingerprint", observed)
+                            .commit()
+                        BarrierAccessibilityService.log(
+                            this@BarrierForegroundService,
+                            "server fingerprint accepted and stored: ${BarrierServerTrustManager.format(observed)}",
+                        )
+                    }
+                }
             }
         }
     }

@@ -16,12 +16,12 @@ This repository does **not** turn the phone into a keyboard or mouse for the com
 
 The protocol layer is unit-tested (27 tests, all passing). The Android app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional. Typing individual keystrokes is not yet possible.
 
-**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with trust-all manager, no double-connect); the visible cursor overlay has since been visually confirmed on a real device, driven by server input over that connection. Injection uses discrete accessibility gestures (not a real system pointer); the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
+**Tested on device**: the connection handshake succeeds and mouse movement reaches the phone. The socket transport was rewritten after that handshake (plain socket / SSL socket with SHA-256 fingerprint pinning, no double-connect); the visible cursor overlay has since been visually confirmed on a real device, driven by server input over that connection. Injection uses discrete accessibility gestures (not a real system pointer); the overlay is a render surface, not a system pointer. See [Status and limitations](docs/limitations.md) for details.
 
 ## Features
 
 - **Protocol client** — full Barrier v1.6 handshake, keepalive, input events, clipboard, screensaver, options, reconnect
-- **TCP/TLS transport** — plain socket or TLS (trust-all manager; not Barrier's fingerprint-verified TLS)
+- **TCP/TLS transport** — plain socket or TLS (server authenticated by SHA-256 fingerprint, Barrier's `ENCRYPTED_AUTHENTICATED`)
 - **Pointer injection** — discrete gestures via `dispatchGesture` (tap and scroll only; movement sends no gesture)
 - **Text injection** — `ACTION_SET_TEXT` on the focused editable field (clipboard push path)
 - **Navigation keys** — Back, Home, Recents via framework global actions
@@ -64,7 +64,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 
 - **No real system cursor**: `dispatchGesture` creates discrete gestures, not a system pointer; the visible cursor is an overlay window rendering a standard arrow. There is no public API for moving a real system cursor.
 - **No arbitrary key injection**: Barrier key IDs are not Android key codes. No public injection API exists on compileSdk 35.
-- **TLS is not Barrier's TLS**: uses a trust-all manager. Barrier's self-signed cert fingerprint verification is not implemented.
+- **TLS is Barrier's TLS**: the server is authenticated by the SHA-256 fingerprint of its self-signed certificate, with trust on first use (Barrier's `ENCRYPTED_AUTHENTICATED`).
 - **No plaintext toggle**: TLS is always attempted. No UI switch for plaintext mode.
 - **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is stored but not read.
 - **File transfer / drag**: `DFTR`/`DDRG` packets are decoded and ignored.

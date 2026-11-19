@@ -21,10 +21,13 @@ The server speaks a protocol version older than 1.6. Upgrade the Barrier server 
 
 ## TLS handshake failure
 
-The client uses a trust-all `TrustManager` (not Barrier's fingerprint-verified TLS). If the TLS handshake fails:
+The client authenticates the server by the SHA-256 fingerprint of its self-signed
+certificate (Barrier's `ENCRYPTED_AUTHENTICATED` mode), with trust on first use.
+If the TLS handshake fails:
 
 - Check if the server is using TLS. If the server is in plaintext mode, the TLS handshake will fail because the server sends plaintext.
 - There is no plaintext toggle in the UI yet. The server must use TLS for the connection to succeed.
+- A fingerprint mismatch (for example after the server regenerated its certificate) is reported as a connection failure; clearing the stored fingerprint lets the client re-accept on next connect.
 - Check logcat for SSL exceptions.
 
 ## The accessibility service is not in Settings
