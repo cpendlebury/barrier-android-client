@@ -280,13 +280,23 @@ class BarrierAccessibilityService : AccessibilityService() {
         }
         var best: AccessibilityNodeInfo? = null
         var bestDepth = -1
+        var bestArea = Long.MAX_VALUE
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             val rect = android.graphics.Rect()
             node.getBoundsInScreen(rect)
             if (!rect.contains(x.toInt(), y.toInt())) return
-            if (node.isClickable && depth > bestDepth) {
-                best = node
-                bestDepth = depth
+            if (node.isClickable) {
+                val area = rect.width().toLong() * rect.height().toLong()
+                // Prefer the deepest node; at the same depth prefer the smallest
+                // (most specific) clickable element. Large clickable containers
+                // (list rows, toolbars, cards) are skipped in favour of a gesture
+                // tap, because ACTION_CLICK on them tends to trigger heavier
+                // navigation than a normal tap.
+                if (depth > bestDepth || (depth == bestDepth && area < bestArea)) {
+                    best = node
+                    bestDepth = depth
+                    bestArea = area
+                }
             }
             for (i in 0 until node.childCount) {
                 val child = node.getChild(i) ?: continue
@@ -297,6 +307,16 @@ class BarrierAccessibilityService : AccessibilityService() {
         val target = best
         if (target == null) {
             BarrierAccessibilityService.log(this, "clickNodeAt x=$x y=$y no clickable node")
+            return false
+        }
+        val rect = android.graphics.Rect()
+        target.getBoundsInScreen(rect)
+        val screenArea = resources.displayMetrics.widthPixels.toLong() * resources.displayMetrics.heightPixels.toLong()
+        val nodeArea = rect.width().toLong() * rect.height().toLong()
+        // Skip large clickable containers: ACTION_CLICK on them tends to trigger
+        // heavier navigation than a normal tap. Fall back to a gesture tap.
+        if (nodeArea > screenArea / 5) {
+            BarrierAccessibilityService.log(this, "clickNodeAt x=$x y=$y node too large (${nodeArea}px, skipping)")
             return false
         }
         val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
