@@ -79,16 +79,39 @@ class BarrierAccessibilityService : AccessibilityService() {
     private val gestureResultCallback = object : AccessibilityService.GestureResultCallback() {
         override fun onCompleted(gestureDescription: GestureDescription) {
             gestureInFlight = false
+            // Chain the next segment if the drag is still active.
+            drag.onSegmentDone()?.let { segment -> dispatchSegment(segment) }
         }
 
         override fun onCancelled(gestureDescription: GestureDescription) {
             gestureInFlight = false
-            // A cancelled drag can no longer be continued; drop the stroke so
-            // the next press starts a fresh one instead of chaining onto a dead
-            // stroke.
-            isDragging = false
-            dragStroke = null
+            drag.onCancelled()
+            synchronized(drag) { dragStroke = null }
         }
+    }
+
+    /** Dispatches one segment of an in-flight drag, chaining via continueStroke. */
+    private fun dispatchSegment(segment: DragCoalescer.Segment) {
+        val stroke = dragStroke ?: return
+        val path = Path().apply {
+            moveTo(segment.fromX, segment.fromY)
+            lineTo(segment.toX, segment.toY)
+        }
+        val newStroke = try {
+            stroke.continueStroke(path, 0L, SEGMENT_DURATION_MS, !segment.last)
+        } catch (t: Throwable) {
+            BarrierAccessibilityService.log(this, "drag continueStroke failed ${t.javaClass.simpleName}: ${t.message}")
+            drag.onCancelled()
+            dragStroke = null
+            return
+        }
+        dragStroke = if (segment.last) null else newStroke
+        gestureInFlight = !segment.last
+        val gesture = GestureDescription.Builder()
+            .addStroke(newStroke)
+            .setDisplayId(DISPLAY_ID)
+            .build()
+        dispatchGesture(gesture, gestureResultCallback, handler)
     }
 
     private var windowManager: WindowManager? = null
@@ -103,17 +126,14 @@ class BarrierAccessibilityService : AccessibilityService() {
     private var lastY = 0f
 
     /**
-     * Drag state for hold-and-move. A button press starts a continuing stroke
-     * ([GestureDescription.StrokeDescription] with `willContinue = true`); moves
-     * append segments via `continueStroke`; release ends the stroke. This is the
-     * only way `dispatchGesture` can approximate a held-button drag, since it
-     * has no "button down across calls" concept. Mirrors Input Leaf's
-     * DragCoalescer approach.
+     * Drag coalescer (Input Leaf pattern) plus the in-flight stroke. A button
+     * press starts a continuing stroke; moves append segments via
+     * `continueStroke`; release ends it. Only one segment is in flight at a
+     * time; moves that arrive meanwhile update the target and are dispatched
+     * when the current segment completes (see [DragCoalescer.onSegmentDone]).
      */
-    private var isDragging = false
+    private val drag = DragCoalescer()
     private var dragStroke: GestureDescription.StrokeDescription? = null
-    private var dragX = 0f
-    private var dragY = 0f
     @Volatile
     private var gestureInFlight = false
 
@@ -202,10 +222,12 @@ class BarrierAccessibilityService : AccessibilityService() {
      */
     private fun startDrag(x: Float, y: Float): Boolean {
         if (gestureInFlight) {
-            // A previous gesture is still running; skip starting a new one.
-            // The position is tracked; the next event retries.
+            // A previous gesture is still running; skip. Position is tracked
+            // by the caller; the next event retries.
             return false
         }
+        // Opening stroke: a zero-duration-ish tap at the press point, marked
+        // willContinue so moves can extend it.
         val path = Path().apply { moveTo(x, y) }
         val stroke = GestureDescription.StrokeDescription(path, 0L, SEGMENT_DURATION_MS, true)
         val gesture = GestureDescription.Builder()
@@ -214,96 +236,42 @@ class BarrierAccessibilityService : AccessibilityService() {
             .build()
         gestureInFlight = true
         dragStroke = stroke
-        isDragging = true
-        dragX = x
-        dragY = y
+        drag.onDown(x, y)
+        BarrierAccessibilityService.log(this, "drag start x=$x y=$y")
         return dispatchGesture(gesture, gestureResultCallback, handler)
     }
 
-    /**
-     * Appends a segment to the in-flight drag stroke. If a gesture is still
-     * running, the move is coalesced (position tracked, dispatch skipped) so
-     * segments never overlap.
-     */
     private fun continueDrag(x: Float, y: Float): Boolean {
-        if (!isDragging) {
-            // No active drag: treat as movement only.
+        if (!drag.isActive()) {
+            // No active drag: nothing to do.
             return false
         }
-        val stroke = dragStroke ?: return false
-        // Capture the previous origin before overwriting.
-        val fromX = dragX
-        val fromY = dragY
-        // Always track the latest position, even when coalescing.
-        dragX = x
-        dragY = y
+        val segment = drag.onMove(x, y) ?: return false
         if (gestureInFlight) {
-            // Coalesce: skip dispatch; position is tracked above.
+            // Coalesced: segment queued; position tracked by DragCoalescer.
             return false
         }
-        val segPath = Path().apply {
-            moveTo(fromX, fromY)
-            lineTo(x, y)
-        }
-        val newStroke = try {
-            stroke.continueStroke(segPath, 0L, SEGMENT_DURATION_MS, true)
-        } catch (t: Throwable) {
-            BarrierAccessibilityService.log(this, "drag continueStroke failed ${t.javaClass.simpleName}: ${t.message}")
-            return false
-        }
-        gestureInFlight = true
-        dragStroke = newStroke
-        val gesture = GestureDescription.Builder()
-            .addStroke(newStroke)
-            .setDisplayId(DISPLAY_ID)
-            .build()
-        dragX = x
-        dragY = y
-        return dispatchGesture(gesture, gestureResultCallback, handler)
+        dispatchSegment(segment)
+        return true
     }
 
-    /**
-     * Ends the in-flight drag stroke. Dispatches the final segment with
-     * `willContinue = false` so the framework releases the gesture.
-     */
     private fun endDrag(x: Float, y: Float): Boolean {
-        if (!isDragging) {
+        if (!drag.isActive()) {
             hideCursor()
             return false
         }
-        val stroke = dragStroke
-        isDragging = false
-        dragStroke = null
-        if (stroke == null) {
-            hideCursor()
-            return false
+        val segment = drag.onUp(x, y)
+        if (segment != null) {
+            dispatchSegment(segment)
+        } else {
+            // Release is pending on the in-flight segment; it will be dispatched
+            // from onSegmentDone when that segment completes.
+            gestureInFlight = gestureInFlight // unchanged
         }
-        val fromX = dragX
-        val fromY = dragY
-        val segPath = Path().apply {
-            moveTo(fromX, fromY)
-            lineTo(x, y)
-        }
-        val finalStroke = try {
-            stroke.continueStroke(segPath, 0L, SEGMENT_DURATION_MS, false)
-        } catch (t: Throwable) {
-            BarrierAccessibilityService.log(this, "drag end continueStroke failed ${t.javaClass.simpleName}: ${t.message}")
-            hideCursor()
-            return false
-        }
-        dragX = x
-        dragY = y
-        gestureInFlight = true
-        val gesture = GestureDescription.Builder()
-            .addStroke(finalStroke)
-            .setDisplayId(DISPLAY_ID)
-            .build()
-        val dispatched = dispatchGesture(gesture, gestureResultCallback, handler)
+        BarrierAccessibilityService.log(this, "drag end x=$x y=$y")
         hideCursor()
-        return dispatched
+        return true
     }
-
-    // (drag origin is tracked in dragX/dragY)
 
     private fun tapGesture(x: Float, y: Float): GestureDescription {
         val path = Path().apply { moveTo(x, y) }

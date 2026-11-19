@@ -71,6 +71,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var statusTextView: TextView
     private lateinit var accessibilityStatusTextView: TextView
     private lateinit var openAccessibilitySettingsButton: Button
+    private lateinit var imeStatusTextView: TextView
+    private lateinit var openKeyboardSettingsButton: Button
     private lateinit var errorTextView: TextView
 
     private var lastPointerX = 0f
@@ -82,6 +84,10 @@ class MainActivity : ComponentActivity() {
                 updateStatus(state)
                 if (state == BarrierClientState.CONNECTED) {
                     errorTextView.text = ""
+                    if (!isBarrierImeEnabled()) {
+                        errorTextView.text = "Barrier keyboard not enabled; keystrokes will not be delivered. Enable it in keyboard settings."
+                        Toast.makeText(this@MainActivity, "Enable the Barrier keyboard in keyboard settings.", Toast.LENGTH_LONG).show()
+                    }
                     // Switch to the Barrier IME so server keystrokes can be
                     // delivered into the focused field. No-op if not enabled.
                     ImeSwitcher.useOurs(this@MainActivity)
@@ -160,6 +166,8 @@ class MainActivity : ComponentActivity() {
         statusTextView = findViewById(R.id.statusTextView)
         accessibilityStatusTextView = findViewById(R.id.accessibilityStatusTextView)
         openAccessibilitySettingsButton = findViewById(R.id.openAccessibilitySettingsButton)
+        imeStatusTextView = findViewById(R.id.imeStatusTextView)
+        openKeyboardSettingsButton = findViewById(R.id.openKeyboardSettingsButton)
         errorTextView = findViewById(R.id.errorTextView)
 
         connectButton.setOnClickListener { connectToBarrierServer() }
@@ -168,6 +176,11 @@ class MainActivity : ComponentActivity() {
             stopService(Intent(this, BarrierForegroundService::class.java))
         }
         openAccessibilitySettingsButton.setOnClickListener { BarrierAccessibilityService.openSettings(this) }
+        openKeyboardSettingsButton.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
 
         // Restore from SharedPreferences (survives process death).
         serverHostEditText.setText(prefs.getString("host", ""))
@@ -209,6 +222,7 @@ class MainActivity : ComponentActivity() {
 
         updateStatus(BarrierClientState.DISCONNECTED)
         updateAccessibilityStatus()
+        updateImeStatus()
 
         // Re-attach to a running service if the activity was recreated.
         BarrierForegroundService.instance?.let { service ->
@@ -239,6 +253,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         BarrierAccessibilityService.log(this, "activity resumed")
         updateAccessibilityStatus()
+        updateImeStatus()
         requestBatteryOptimizationExemption()
     }
 
@@ -359,6 +374,19 @@ class MainActivity : ComponentActivity() {
         val enabled = BarrierAccessibilityService.isEnabled(this)
         accessibilityStatusTextView.text = "Accessibility service: " + if (enabled) "enabled" else "disabled"
         openAccessibilitySettingsButton.visibility = if (enabled) View.GONE else View.VISIBLE
+    }
+
+    private fun isBarrierImeEnabled(): Boolean {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            ?: return false
+        val expected = "com.crrpendlebury.barrierandroid/.ime.BarrierIME"
+        return imm.enabledInputMethodList.any { it.id == expected }
+    }
+
+    private fun updateImeStatus() {
+        val enabled = isBarrierImeEnabled()
+        imeStatusTextView.text = "Keyboard (IME): " + if (enabled) "enabled" else "disabled (enable in keyboard settings)"
+        openKeyboardSettingsButton.visibility = if (enabled) View.GONE else View.VISIBLE
     }
 
     /**

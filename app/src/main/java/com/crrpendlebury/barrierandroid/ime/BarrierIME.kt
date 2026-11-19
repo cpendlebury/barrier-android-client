@@ -1,8 +1,12 @@
 package com.crrpendlebury.barrierandroid.ime
 
 import android.inputmethodservice.InputMethodService
+import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService
 
 /**
  * Barrier input method. The computer runs the Barrier server and owns the
@@ -15,14 +19,20 @@ import android.view.inputmethod.InputConnection
  *
  * Public methods are called from [com.crrpendlebury.barrierandroid.MainActivity]
  * when Barrier key packets arrive. If no input connection is available (no
- * focused editable field), the call is a no-op.
+ * focused editable field), the call is a no-op and is logged.
  */
 class BarrierIME : InputMethodService() {
 
     companion object {
+        private const val TAG = "BarrierIME"
+
         @Volatile
         var instance: BarrierIME? = null
             private set
+
+        fun log(context: android.content.Context, message: String) {
+            BarrierAccessibilityService.log(context, message)
+        }
     }
 
     /** Accumulated modifier state (shift/ctrl/alt/meta) for the current key. */
@@ -33,10 +43,17 @@ class BarrierIME : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        log(this, "BarrierIME onCreate")
+    }
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        log(this, "BarrierIME onStartInput restarting=$restarting hasConnection=${currentInputConnection != null}")
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        log(this, "BarrierIME onDestroy")
         super.onDestroy()
     }
 
@@ -46,14 +63,31 @@ class BarrierIME : InputMethodService() {
 
     /** Commits [text] into the focused field. */
     fun commitText(text: CharSequence) {
-        currentInputConnection?.commitText(text, 1)
+        val ic = currentInputConnection
+        if (ic == null) {
+            log(this, "commitText: no InputConnection available")
+            return
+        }
+        ic.commitText(text, 1)
+        log(this, "commitText: '$text'")
     }
 
     /** Sends a key event (down or up) into the focused field. */
     fun sendKey(keyCode: Int, meta: Int = 0, isDown: Boolean) {
+        val ic = currentInputConnection
+        if (ic == null) {
+            log(this, "sendKey: no InputConnection available keyCode=$keyCode")
+            return
+        }
         val action = if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-        val event = KeyEvent(0L, 0L, action, keyCode, 0, meta)
-        currentInputConnection?.sendKeyEvent(event)
+        val eventTime = SystemClock.uptimeMillis()
+        val event = KeyEvent(
+            eventTime, eventTime,
+            action, keyCode, 0, meta,
+            -1, 0, KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE,
+        )
+        ic.sendKeyEvent(event)
+        log(this, "sendKey: action=$action keyCode=$keyCode meta=$meta")
     }
 
     /** Updates the accumulated modifier state from a Barrier modifier mask. */
@@ -64,6 +98,7 @@ class BarrierIME : InputMethodService() {
         if (mask and 0x0004 != 0) m = m or KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
         if (mask and 0x0008 != 0) m = m or KeyEvent.META_META_ON or KeyEvent.META_META_LEFT_ON
         metaState = m
+        log(this, "updateModifiers mask=$mask metaState=$m")
     }
 
     /** Clears modifier state (e.g. on key up of a modifier). */
