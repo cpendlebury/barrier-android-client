@@ -107,7 +107,7 @@
    **2026-11-18 update — route 2**: after the `createWindowContext` crash + revert, selected **route 2** as the path to a working cursor (Red Moon-aligned overlay: full-screen translucent layout, `WRAP_CONTENT` + `gravity = TOP`, flags, `TYPE_ACCESSIBILITY_OVERLAY`, plain-context add). Instrumentation added and pushed (build green). Overlay implemented via plain service-context `WindowManager` add with no-arg `LayoutParams` + field assignment and `gravity = Gravity.TOP or Gravity.START`; real-device validation of the cursor was pending after the overlay fixes and the 2026-11-20 `injectPointer` drag rework.
 2. Remaining key injection: arbitrary keycodes still lack an accessibility path (compileSdk 35 has no `dispatchKeyEvent`); server keystrokes now flow through the Barrier IME (`BarrierIME` + `ImeSwitcher`) when enabled — validate the user-side enablement/selection flow on device, then evaluate hidden `InputManager` reflection for direct key injection.
 3. File transfer/drag info handling (deferred stubs).
-4. UI improvements: notification text is still fixed ("Waiting for Barrier server") — update with connection state; add plaintext TLS toggle (the transport honours `useTls`, but the UI currently always passes `true`).
+4. UI improvements: foreground notification text now reflects connection state (updated via the client listener); add plaintext TLS toggle (the transport honours `useTls`, but the UI currently always passes `true`).
 
 ## Handy commands
 - Tests: `./gradlew :app:testDebugUnitTest --offline`

@@ -63,7 +63,10 @@ import kotlinx.coroutines.launch
  * checks, and the manifest declares `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` for
  * Android 14+, so the service can start on older and newer devices.
  *
- * The notification text is fixed. It does not reflect connection state.
+ * The foreground notification text reflects connection state: it reads
+ * "Waiting for Barrier server" before a client connects, is updated to
+ * "Barrier: connected" when the client reaches [BarrierClientState.CONNECTED],
+ * and moves to reconnecting text after [BarrierClientState.DISCONNECTED].
  */
 class BarrierForegroundService : Service() {
 
@@ -97,6 +100,7 @@ class BarrierForegroundService : Service() {
                     "client state disconnected; hiding cursor",
                 )
             }
+            updateForegroundNotification(state)
             connectionListener?.onStateChanged(state)
         }
 
@@ -210,7 +214,7 @@ class BarrierForegroundService : Service() {
                 startConnection(pendingConn)
             }
         }
-        val notification = buildForegroundNotification()
+        val notification = buildForegroundNotification(client?.currentState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 FOREGROUND_NOTIFICATION_ID,
@@ -314,7 +318,7 @@ class BarrierForegroundService : Service() {
         }
     }
 
-    private fun buildForegroundNotification(): Notification {
+    private fun buildForegroundNotification(state: BarrierClientState?): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager =
                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -325,11 +329,29 @@ class BarrierForegroundService : Service() {
             )
             notificationManager.createNotificationChannel(channel)
         }
+        val contentText = when {
+            state == BarrierClientState.CONNECTED -> "Barrier: connected"
+            state == BarrierClientState.DISCONNECTED -> "Barrier: reconnecting"
+            else -> "Waiting for Barrier server"
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Barrier")
-            .setContentText("Waiting for Barrier server")
+            .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_barrier_notification)
             .build()
+    }
+
+    private fun updateForegroundNotification(state: BarrierClientState?) {
+        // The client listener fires from the service coroutine scope (background);
+        // notifications are posted on the main thread.
+        mainHandler.post {
+            val notificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(
+                FOREGROUND_NOTIFICATION_ID,
+                buildForegroundNotification(state),
+            )
+        }
     }
 
     /**
