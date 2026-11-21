@@ -282,9 +282,15 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     private fun scrollGesture(x: Float, y: Float): GestureDescription {
+        // GestureDescription path bounds must not be negative; a scroll
+        // arriving near the top of the display (small or negative y) would
+        // otherwise throw IllegalArgumentException and kill the process.
+        val startX = if (x < 0f) 0f else x
+        val startY = if (y < 0f) 0f else y
+        val endY = if (y - SCROLL_DISTANCE_PX < 0f) 0f else y - SCROLL_DISTANCE_PX
         val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x, y - SCROLL_DISTANCE_PX)
+            moveTo(startX, startY)
+            lineTo(startX, endY)
         }
         return GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, SCROLL_STROKE_DURATION_MS))
