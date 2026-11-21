@@ -445,31 +445,26 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Host Ctrl+V (paste): deliver the stored clipboard content into the
-        // focused field instead of committing the literal character. The Barrier
-        // server reports Ctrl-modified keys with the CONTROL bit (0x0002) set in
-        // the modifier mask and the letter's keysym as the key id, so Ctrl+V
-        // arrives here as keyId 0x76 with mask 0x0002.
-        if ((modifierMask and 0x0002) != 0 && keyId == 0x76) {
-            if (isDown) {
-                BarrierIME.instance?.paste()
-            }
-            return
-        }
-
-        // Host Ctrl+C (copy) / Ctrl+X (cut): source from the focused editable
-        // field via the accessibility service and land in the Android clipboard,
-        // so a later host Ctrl+V (paste) delivers it. Copy keeps the field;
-        // cut clears it (no selection-capable action exists).
-        if ((modifierMask and 0x0002) != 0 && keyId == 0x43) {
+        // Host Ctrl+C (copy) / Ctrl+X (cut) / Ctrl+V (paste): source from the
+        // focused editable field via the accessibility service and land in the
+        // Android clipboard, so a later host Ctrl+V (paste) delivers it. Copy
+        // keeps the field; cut clears it (no selection-capable action exists).
+        // Keysyms are lowercase: Ctrl+C=0x63, Ctrl+X=0x78, Ctrl+V=0x76.
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x63) {
             if (isDown) {
                 BarrierAccessibilityService.instance?.copyFocusedEditableText()
             }
             return
         }
-        if ((modifierMask and 0x0002) != 0 && keyId == 0x58) {
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x78) {
             if (isDown) {
                 BarrierAccessibilityService.instance?.cutFocusedEditableText()
+            }
+            return
+        }
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x76) {
+            if (isDown) {
+                BarrierIME.instance?.paste()
             }
             return
         }
