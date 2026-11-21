@@ -435,6 +435,18 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // Host Ctrl+V (paste): deliver the stored clipboard content into the
+        // focused field instead of committing the literal character. The Barrier
+        // server reports Ctrl-modified keys with the CONTROL bit (0x0002) set in
+        // the modifier mask and the letter's keysym as the key id, so Ctrl+V
+        // arrives here as keyId 0x76 with mask 0x0002.
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x76) {
+            if (isDown) {
+                BarrierIME.instance?.paste()
+            }
+            return
+        }
+
         if (conn == null) {
             // No focused editable field / IME not active: fall back to the
             // accessibility service's (limited) key path.

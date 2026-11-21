@@ -90,6 +90,30 @@ class BarrierIME : InputMethodService() {
         log(this, "sendKey: action=$action keyCode=$keyCode meta=$meta")
     }
 
+    /**
+     * Pastes the current device clipboard content into the focused field.
+     *
+     * Used for host-driven paste (for example the host sending Ctrl+V): the
+     * clipboard payload received from the server is stored here, and a host
+     * paste key commits that content via [InputConnection]. No InputConnection
+     * means there is nothing to paste into; an empty clipboard is a no-op.
+     */
+    fun paste() {
+        val ic = currentInputConnection
+        if (ic == null) {
+            log(this, "paste: no InputConnection available")
+            return
+        }
+        val clipboard =
+            getApplicationContext().getSystemService(android.content.ClipboardManager::class.java) as android.content.ClipboardManager
+        val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+        if (text.isEmpty()) {
+            log(this, "paste: clipboard empty")
+            return
+        }
+        commitText(text)
+    }
+
     /** Updates the accumulated modifier state from a Barrier modifier mask. */
     fun updateModifiers(mask: Int) {
         var m = 0
