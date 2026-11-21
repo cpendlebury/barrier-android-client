@@ -523,6 +523,41 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Copies the focused editable node's text into the Android clipboard via
+     * [android.content.ClipboardManager]. Returns the copied text, or null when
+     * no focused editable field is present. Used by the host Ctrl+C chord.
+     */
+    fun copyFocusedEditableText(): CharSequence? {
+        val root = getRootInActiveWindow() ?: return null
+        val node = findEditableFocusedNode(root) ?: return null
+        val text = node.text ?: return null
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("barrier", text))
+        log(this, "copyFocusedEditableText: copied ${text.length} chars")
+        return text
+    }
+
+    /**
+     * Cuts the focused editable node's text into the Android clipboard and
+     * clears the field (no selection-capable action exists, so clearing uses
+     * ACTION_SET_TEXT with an empty string). Returns the cut text, or null when
+     * no focused editable field is present. Used by the host Ctrl+X chord.
+     */
+    fun cutFocusedEditableText(): CharSequence? {
+        val root = getRootInActiveWindow() ?: return null
+        val node = findEditableFocusedNode(root) ?: return null
+        val text = node.text ?: return null
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("barrier", text))
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+        }
+        val cleared = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        log(this, "cutFocusedEditableText: cleared=$cleared chars=${text.length}")
+        return text
+    }
+
+    /**
      * Translucent overlay window that draws the visible pointer cursor. Added
      * via [WindowManager.addView] from the service and removed via
      * [WindowManager.removeView]; added/removed on the main thread via the

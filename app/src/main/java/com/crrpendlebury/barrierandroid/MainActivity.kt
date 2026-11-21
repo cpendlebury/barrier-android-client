@@ -447,6 +447,23 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // Host Ctrl+C (copy) / Ctrl+X (cut): source from the focused editable
+        // field via the accessibility service and land in the Android clipboard,
+        // so a later host Ctrl+V (paste) delivers it. Copy keeps the field;
+        // cut clears it (no selection-capable action exists).
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x43) {
+            if (isDown) {
+                BarrierAccessibilityService.instance?.copyFocusedEditableText()
+            }
+            return
+        }
+        if ((modifierMask and 0x0002) != 0 && keyId == 0x58) {
+            if (isDown) {
+                BarrierAccessibilityService.instance?.cutFocusedEditableText()
+            }
+            return
+        }
+
         if (conn == null) {
             // No focused editable field / IME not active: fall back to the
             // accessibility service's (limited) key path.

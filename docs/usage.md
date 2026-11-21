@@ -44,6 +44,8 @@ The status text is refreshed in `onCreate` and `onResume`.
 
 **Host-driven paste**: when the host sends Ctrl+V, the client routes the key event (keyId `0x76`, CONTROL modifier bit `0x0002`) to the IME paste action, which commits the stored clipboard content into the focused editable field via `InputConnection.commitText`. This is the explicit paste path: copy on the host → stored on the phone; press Ctrl+V on the host → delivered into a focused field.
 
+**Host copy and cut**: host Ctrl+C (keyId `0x43`) copies the focused editable field's text into the Android clipboard via the accessibility service; host Ctrl+X (keyId `0x58`) cuts (copies then clears the field). A subsequent host Ctrl+V (paste) delivers the stored content into the focused field.
+
 **Keystroke typing**: individual keystrokes are now possible when the Barrier keyboard (IME) is enabled in system settings and selected as the active input method. In that mode, Barrier key events are committed into the focused field via `InputConnection` (printable characters via `commitText`, special keys via `sendKeyEvent`), with modifier state from the Barrier modifier mask. If the IME is not active, key events fall back to the accessibility service's limited global-action path (Back/Home/Recents only). Keystroke-by-keystroke injection into arbitrary fields without the IME is not possible (no public key injection API).
 
 ## Mouse movement
