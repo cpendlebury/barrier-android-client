@@ -12,10 +12,19 @@ android {
         applicationId = "com.crrpendlebury.barrierandroid"
         minSdk = 22
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = File("/home/chris/Android/keystore/barrier-release.jks")
+            storePassword = "barrier-release-store"
+            keyAlias = "barrier"
+            keyPassword = "barrier-release-store"
+        }
     }
 
     buildTypes {
@@ -25,6 +34,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

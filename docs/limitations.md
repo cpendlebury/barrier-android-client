@@ -109,5 +109,5 @@ The foreground service notification text reflects connection state: it reads "Wa
 
 - `settings.gradle.kts` sets `rootProject.name = "BarrierAndroid"`. The application id and launcher name are unchanged by that string.
 - Compose is still on the classpath and unused. The UI is XML views. Retrofit and Gson were removed.
-- Version in the manifest is the template `versionName` 1.0 / `versionCode` 1. That is not a release.
+- Version in the manifest is now `versionName` 0.1.0 / `versionCode` 2, wired to a release signing config (`barrier-release.jks`, alias `barrier`). That is the 0.1.0 release.
 - File-transfer (`DFTR`) and drag (`DDRG`) packets are decoded and ignored.
