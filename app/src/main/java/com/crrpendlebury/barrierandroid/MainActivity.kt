@@ -331,13 +331,23 @@ class MainActivity : ComponentActivity() {
 
     private fun readClipboardBytes(): ByteArray? {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip ?: return null
+        val clip = clipboard.primaryClip
+        if (clip == null) {
+            BarrierAccessibilityService.log(this, "clipboard grab: no primary clip")
+            return null
+        }
         val item = clip.getItemAt(0) ?: return null
         val text = item.text?.toString() ?: return ByteArray(0)
-        return text.toByteArray(Charsets.UTF_8)
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        BarrierAccessibilityService.log(this, "clipboard grab: ${bytes.size} bytes")
+        return bytes
     }
 
     private fun handleClipboardData(packet: BarrierPacket.ClipboardDataPacket) {
+        BarrierAccessibilityService.log(
+            this,
+            "clipboard data received from server: ${packet.data.size} bytes",
+        )
         // Store clipboard data received from the server (DCLP) into the device
         // clipboard so subsequent clipboard grabs (CCLP) can serve it and so the
         // content is available for an explicit user-initiated paste. The payload
