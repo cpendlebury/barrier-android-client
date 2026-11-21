@@ -22,13 +22,11 @@ package com.crrpendlebury.barrierandroid
  *
  * [handleClipboardData] and [readClipboardBytes] run only when the client
  * invokes them. The clipboard lambdas from the pending connection are copied
- * onto the client, so a clipboard grab from the server reaches them. If called,
- * [handleClipboardData] replaces the device clipboard and then tries
- * [com.crrpendlebury.barrierandroid.accessibility.BarrierAccessibilityService.injectText],
- * which replaces a focused field rather than typing. Injection failure text
- * distinguishes "service not enabled" from "no focused editable field". The
- * second message is also what you get when the service object exists but the
- * node walk misses.
+ * onto the client, so a clipboard grab from the server reaches them. When the
+ * server pushes clipboard data (DCLP), [handleClipboardData] stores it into the
+ * device clipboard via ClipboardManager rather than injecting it into whatever
+ * field is focused, so the content is available for an explicit user-initiated
+ * paste instead of landing in the focused field on arrival.
  *
  * Views are the XML layout `activity_main`. Compose is on the classpath and
  * unused here.
@@ -342,23 +340,15 @@ class MainActivity : ComponentActivity() {
     private fun handleClipboardData(packet: BarrierPacket.ClipboardDataPacket) {
         // Store clipboard data received from the server (DCLP) into the device
         // clipboard so subsequent clipboard grabs (CCLP) can serve it and so the
-        // content is available for paste/injection use.
+        // content is available for an explicit user-initiated paste. The payload
+        // is deliberately NOT injected into whatever field happens to be
+        // focused; delivery into a field is an explicit paste action, not an
+        // arrival side effect.
         val text = String(packet.data, 0, packet.data.size, Charsets.UTF_8)
         runOnUiThread {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("barrier", text))
-            // Deliver received text into the focused editable app via the
-            // accessibility service (ACTION_SET_TEXT).
-            val service = BarrierAccessibilityService.instance
-            if (service == null || !service.injectText(text)) {
-                if (!BarrierAccessibilityService.isEnabled(this@MainActivity)) {
-                    errorTextView.text = "Accessibility service not enabled; text not injected."
-                } else {
-                    errorTextView.text = "Text injection failed (no focused editable field)."
-                }
-            } else {
-                errorTextView.text = ""
-            }
+            errorTextView.text = ""
         }
     }
 

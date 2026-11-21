@@ -48,15 +48,13 @@ When enabling the accessibility service on a sideloaded app, Android shows a war
 3. Confirm the dialog
 4. Go back to Settings → Accessibility → BarrierAndroid → toggle On
 
-## "Text injection failed (no focused editable field)"
+## Clipboard receipt and text injection
 
-`ACTION_SET_TEXT` requires a focused, editable text field in the active window. If no such field is focused, injection fails.
+When the server pushes clipboard data (DCLP), the app stores it into the device clipboard via `ClipboardManager` and does not inject it into the focused editable field, so receipt does not depend on a focused field and cannot fail there.
 
-**Fix**: Tap into a text field (e.g., a search bar or message input) on the phone before triggering text delivery from the server.
+## Accessibility service not enabled
 
-## "Accessibility service not enabled; text not injected."
-
-The accessibility service is disabled. Enable it via Settings → Accessibility.
+The accessibility service is disabled. Enable it via Settings → Accessibility. The service remains required for pointer injection and global actions; it is not consulted for clipboard receipt.
 
 ## Reconnect loop
 

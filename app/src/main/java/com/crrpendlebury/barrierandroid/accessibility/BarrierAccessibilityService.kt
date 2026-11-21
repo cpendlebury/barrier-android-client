@@ -480,7 +480,9 @@ class BarrierAccessibilityService : AccessibilityService() {
      * contents. There is no public "insert text at cursor" action, so
      * appending requires reading the current text, concatenating, and
      * setting the whole string. This method does not append; it replaces.
-     * It is only useful after a clipboard payload, which is the only caller.
+     * It is not invoked by the clipboard receive path — received clipboard
+     * data is stored, not injected — and remains available for explicit
+     * paste delivery.
      * It requires `getRootInActiveWindow()` to return a tree, which requires
      * `canRetrieveWindowContent` in the service config (now declared).
      *

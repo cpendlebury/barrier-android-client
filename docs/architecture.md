@@ -79,7 +79,7 @@ Breaks on that path, in order:
 - `CIAK` is ignored. `DSOP` applies options, sets `CONNECTED`, notifies, and starts keepalive plus a watchdog.
 - Input packets notify the listener and send `CNOP`.
 - `CALV` is answered with `CALV`.
-- `CCLP` calls `onClipboardGrab` and sends `DCLP`. `DCLP` stores the packet and calls `onClipboardData`.
+- `CCLP` calls `onClipboardGrab` and sends `DCLP`. `DCLP` reaches the clipboard handler, which stores the payload into the device clipboard (no field injection).
 - `CSEC` stores `screenSaverActive` and calls `onScreenSaverChanged`.
 - `CBYE`, version errors, and `EBSY` / `EUNK` / `EBAD` call `closeTransport`. If the previous state was `CONNECTED`, that schedules reconnect unless `disconnect()` set `userInitiatedClose`.
 - `DFTR` and `DDRG` are ignored. `CINN` / `COUT` update screen sequence and notify `ScreenEntered` / `ScreenLeft`, then send `CNOP`. The activity ignores those two events.
@@ -90,7 +90,7 @@ Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In
 
 `BarrierAccessibilityService` is a `AccessibilityService` with empty `onAccessibilityEvent` / `onInterrupt`. `onServiceConnected` publishes `instance`. The manifest now declares the `android.accessibilityservice` meta-data pointing at `res/xml/accessibility_service_config.xml`, so Android should list it in Settings. The system starts it only after the user enables it; the app does not start it itself.
 
-`injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer`, `injectKey`, and `injectText` are called from `MainActivity` only when a client listener fires. With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
+`injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer` and `injectKey` are called from `MainActivity` only when a client listener fires; `injectText` is retained but is not called from the clipboard handler (received clipboard data is stored, not injected). With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
 
 Pointer injection renders a visible cursor. `showCursor` / `hideCursor` add or remove a translucent overlay window (`WindowManager.addView` / `removeView`) whose inner `CursorOverlayView` draws a standard arrow. `injectPointer` mirrors injected position onto that overlay and drives show / move / hide; button-down, movement, and scroll show the cursor, button-up hides it. The overlay uses window type `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` below API 23), `FLAG_NOT_TOUCHABLE` / `FLAG_NOT_FOCUSABLE` / `FLAG_LAYOUT_NO_LIMITS` / `FLAG_LAYOUT_IN_SCREEN`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, and a translucent format with a display-plus-margin window size. The overlay is a render surface only; `dispatchGesture` remains the sole gesture-producing path. The cursor hides on disconnect / screensaver via the client state listener and screensaver callback. The arrow is a classic pointer shape with a white fill and a black outline, so it stays visible on both light and dark content.
 
