@@ -1,14 +1,16 @@
-Use your Android phone as a secondary input screen for the Barrier server.
+Use your computer to control your Android phone with Barrier.
 
-The computer runs the Barrier server and owns the real keyboard and mouse. Your phone runs Barrier Android, which receives input events from the server over the network and injects them into the device through Android accessibility services and an input method.
+The computer runs the Barrier server and owns the real keyboard and mouse. Your phone runs Barrier Android, the client that receives input events from the server and injects them into the device through Android accessibility services and an input method.
+
+You control your phone with your computer.
+
+The main Barrier project can be found at: https://github.com/debachee/barrier, this is an Android extension to it.
 
 Features:
 - Full Barrier protocol client: handshake, keepalive, clipboard, screensaver and options, reconnect
 - Pointer injection via accessibility gestures, with a visible cursor overlay
 - Text input through the Barrier IME and accessibility paths
 - Clipboard sharing between host and device
-
-The phone does not display the computer's screen; video is out of scope. It acts on the input the computer sends.
 
 Requirements: Android 5.0 or later, and a Barrier server.
 
