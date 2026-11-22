@@ -40,6 +40,19 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 
 ## Quick start
 
+### Install the 0.1.0 release APK
+
+1. On your Android device, open the browser and download [`barrier-android-0.1.0.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.0/barrier-android-0.1.0.apk) from the [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.0).
+2. When the download completes, open the notification shade or Downloads and tap the APK, then confirm installation.
+3. If Android prompts, allow installing unknown apps from the browser; on Android 11+ you may need to grant that permission.
+4. Open **Settings → Accessibility → BarrierAndroid** and enable the service (grant restricted settings on Android 13+).
+5. Launch BarrierAndroid, enter the server host/port, tap **Connect**.
+6. On the Barrier server, add a screen named `AndroidBarrierClient` (or your chosen name) and position it in the grid.
+
+See [Usage](docs/usage.md) for the full walkthrough.
+
+### Build and install a debug APK from source
+
 1. Build the APK: `./gradlew :app:assembleDebug`
 2. Install on the Android device.
 3. Open **Settings → Accessibility → BarrierAndroid** and enable the service (grant restricted settings on Android 13+).
@@ -52,7 +65,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 
 | Document | Description |
 |----------|-------------|
-| [Installation](docs/installation.md) | Build from source, install APK, prerequisites |
+| [Installation](docs/installation.md) | Install the 0.1.0 release APK or build from source, prerequisites |
 | [Usage](docs/usage.md) | Connecting, enabling accessibility, injecting input |
 | [Configuration](docs/configuration.md) | Server setup, options, clipboard, TLS |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |

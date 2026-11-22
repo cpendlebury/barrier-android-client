@@ -1,8 +1,20 @@
 # Installation
 
-This page is for building and installing the debug APK, and for running unit tests. The app connects to a Barrier server and reaches `CONNECTED`, but input injection is limited to discrete gestures and clipboard-based text. Read [Status and limitations](limitations.md) first.
+This page covers installing the current release APK, building/installing the debug APK, and running unit tests. The app connects to a Barrier server and reaches `CONNECTED`, but input injection is limited to discrete gestures and clipboard-based text. Read [Status and limitations](limitations.md) first.
 
-There is no downloadable release. Clone the repository and build it.
+The current public release is 0.1.0, published on GitHub: [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.0).
+
+## Release APK — 0.1.0
+
+- Release version: `0.1.0` (`versionCode` 2)
+- APK: [`barrier-android-0.1.0.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.0/barrier-android-0.1.0.apk)
+- SHA-256: `0ad95d1c44336f7aba6ff6d4326334f0a34b8a0d58fe2e904ed5ccca07f66437`
+
+Install the release APK directly on the Android device:
+
+1. Open the browser on your Android device and download [`barrier-android-0.1.0.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.0/barrier-android-0.1.0.apk).
+2. When the download completes, open the notification shade or Downloads and tap the APK, then confirm installation.
+3. If Android prompts, allow installing unknown apps from the browser; on Android 11+ you may need to grant that permission.
 
 ## Requirements
 
@@ -28,7 +40,7 @@ Debug APK:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Release packaging (`:app:assembleRelease`) is not set up for distribution. Minify is off and there is no signing config in the project.
+Release packaging (`:app:assembleRelease`) is configured with the release signing config and produced the signed release build for 0.1.0; the official distribution APK is the GitHub release asset described above. Minify is off.
 
 ## Install on a device
 
