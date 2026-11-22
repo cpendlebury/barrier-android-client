@@ -2,17 +2,17 @@
 
 This page covers installing the current release APK, building/installing the debug APK, and running unit tests. The app connects to a Barrier server and reaches `CONNECTED`, but input injection is limited to discrete gestures and clipboard-based text. Read [Status and limitations](limitations.md) first.
 
-The current public release is 0.1.0, published on GitHub: [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.0).
+The current public release is 0.1.1, published on GitHub: [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.1).
 
-## Release APK — 0.1.0
+## Release APK — 0.1.1
 
-- Release version: `0.1.0` (`versionCode` 2)
-- APK: [`barrier-android-0.1.0.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.0/barrier-android-0.1.0.apk)
+- Release version: `0.1.1` (`versionCode` 3)
+- APK: [`barrier-android-0.1.1.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.1/barrier-android-0.1.1.apk)
 - SHA-256: `0ad95d1c44336f7aba6ff6d4326334f0a34b8a0d58fe2e904ed5ccca07f66437`
 
 Install the release APK directly on the Android device:
 
-1. Open the browser on your Android device and download [`barrier-android-0.1.0.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.0/barrier-android-0.1.0.apk).
+1. Open the browser on your Android device and download [`barrier-android-0.1.1.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.1/barrier-android-0.1.1.apk).
 2. When the download completes, open the notification shade or Downloads and tap the APK, then confirm installation.
 3. If Android prompts, allow installing unknown apps from the browser; on Android 11+ you may need to grant that permission.
 
