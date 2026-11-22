@@ -1,0 +1,1 @@
+Added an in-app debug logging toggle to help diagnose connection and input injection issues.
