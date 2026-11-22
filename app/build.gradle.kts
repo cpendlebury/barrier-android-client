@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Release keystore for local release signing; F-Droid build servers have no such file,
+// so the release build is left unsigned there (F-Droid signs the built APK itself).
+val releaseKeystoreFile = File("/home/chris/Android/keystore/barrier-release.jks")
+
 android {
     namespace = "com.crrpendlebury.barrierandroid"
     compileSdk = 35
@@ -34,7 +38,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // F-Droid's build servers have no release keystore on disk and sign the
+            // built APK themselves, so the release build must come out unsigned there.
+            // Where the release keystore exists (local), keep the release build signed.
+            signingConfig = if (releaseKeystoreFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
         }
     }
     compileOptions {
