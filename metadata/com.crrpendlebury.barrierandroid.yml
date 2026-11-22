@@ -1,0 +1,48 @@
+Packs:
+  - com.crrpendlebury.barrierandroid
+
+Version:
+  - 0.1.1: 3
+
+AuthorName:
+  - Christopher Pendlebury
+AuthorEmail:
+  - chris@christopherpendlebury.com
+AuthorWebSite:
+  - https://github.com/cpendlebury
+
+License:
+  - GPL-2.0-only
+
+WebSite:
+  - https://github.com/cpendlebury/barrier-android-client
+
+SourceCode:
+  - https://github.com/cpendlebury/barrier-android-client
+
+IssueTracker:
+  - https://github.com/cpendlebury/barrier-android-client/issues
+
+RepoType:
+  - git
+
+Repo:
+  - https://github.com/cpendlebury/barrier-android-client
+
+Builds:
+  - versionName: 0.1.1
+    versionCode: 3
+    commit: 08c7d6f6c221744387bb899fcc884fc36fbef17d
+    gradle: yes
+
+AutoUpdateMode:
+  - Version
+
+UpdateCheckMode:
+  - Tags
+
+CurrentVersion:
+  - 0.1.1
+
+CurrentVersionCode:
+  - 3
