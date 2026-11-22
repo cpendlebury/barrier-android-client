@@ -1,14 +1,15 @@
-Barrier Android turns your Android phone into a secondary input screen for the Barrier server.
+Use your Android phone as a secondary input screen for the Barrier server.
 
-The computer runs the Barrier server and owns the real keyboard and mouse. The phone runs this client, which receives input events from the server over the network and injects them into the device through Android accessibility services and an input method.
+The computer runs the Barrier server and owns the real keyboard and mouse. Your phone runs Barrier Android, which receives input events from the server over the network and injects them into the device through Android accessibility services and an input method.
 
 Features:
-- Full Barrier protocol client (handshake, keepalive, clipboard, screensaver and options, reconnect)
+- Full Barrier protocol client: handshake, keepalive, clipboard, screensaver and options, reconnect
 - Pointer injection via accessibility gestures, with a visible cursor overlay
 - Text input through the Barrier IME and accessibility paths
 - Clipboard sharing between host and device
 
-The phone does not display the computer's screen; video is out of scope. It acts on input sent from the computer.
+The phone does not display the computer's screen; video is out of scope. It acts on the input the computer sends.
 
-Requires Android 5.0 or later and a Barrier server.
+Requirements: Android 5.0 or later, and a Barrier server.
+
 .
