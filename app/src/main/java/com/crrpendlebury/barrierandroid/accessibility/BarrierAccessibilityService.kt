@@ -668,23 +668,22 @@ class BarrierAccessibilityService : AccessibilityService() {
          * window reaches the screen and the arrow's position is the remaining
          * question. Must be set to false once the cursor is confirmed visible.
          */
-        /**
-         * Diagnostic only. When true, per-event pointer and overlay lines (every
-         * injected motion, every overlay show, every draw) go to the debug log.
-         * Each call opens and appends to the file on the calling thread, so this
-         * is too costly for normal use and is off by default. Lifecycle lines
-         * (addView, attach, detach, size, hide) are always logged.
-         */
-        private const val VERBOSE_CURSOR_LOG = false
-
-        private fun logVerbose(context: Context, message: String) {
-            if (VERBOSE_CURSOR_LOG) {
-                log(context, message)
-            }
-        }
-
         private const val DEBUG_OVERLAY_FILL = false
         private const val DEBUG_OVERLAY_FILL_COLOR = 0x80FF0000.toInt()
+
+        /**
+         * Debug logging is controlled by the user-facing toggle persisted as
+         * `debug_logging_enabled`; it defaults to false.
+         */
+        private const val DEBUG_LOGGING_ENABLED_KEY = "debug_logging_enabled"
+
+        fun isDebugLoggingEnabled(context: Context): Boolean =
+            context.getSharedPreferences("barrier_settings", Context.MODE_PRIVATE)
+                .getBoolean(DEBUG_LOGGING_ENABLED_KEY, false)
+
+        private fun logVerbose(context: Context, message: String) {
+            log(context, message)
+        }
 
         /**
          * Cursor fill is white and the outline is black, as on a desktop pointer,
@@ -713,6 +712,7 @@ class BarrierAccessibilityService : AccessibilityService() {
          * take down the pointer injection path.
          */
         fun log(context: Context, message: String) {
+            if (!isDebugLoggingEnabled(context)) return
             try {
                 val dir = context.getExternalFilesDir(null) ?: return
                 val file = File(dir, LOG_FILE_NAME)

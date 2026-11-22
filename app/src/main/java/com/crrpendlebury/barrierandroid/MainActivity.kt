@@ -43,6 +43,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var imeStatusTextView: TextView
     private lateinit var openKeyboardSettingsButton: Button
     private lateinit var errorTextView: TextView
+    private lateinit var debugLoggingCheckBox: CheckBox
 
     private var lastPointerX = 0f
     private var lastPointerY = 0f
@@ -172,6 +174,11 @@ class MainActivity : ComponentActivity() {
         imeStatusTextView = findViewById(R.id.imeStatusTextView)
         openKeyboardSettingsButton = findViewById(R.id.openKeyboardSettingsButton)
         errorTextView = findViewById(R.id.errorTextView)
+        debugLoggingCheckBox = findViewById(R.id.debugLoggingCheckBox)
+        debugLoggingCheckBox.isChecked = prefs.getBoolean("debug_logging_enabled", false)
+        debugLoggingCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("debug_logging_enabled", isChecked).commit()
+        }
 
         connectButton.setOnClickListener { connectToBarrierServer() }
         disconnectButton.setOnClickListener {
