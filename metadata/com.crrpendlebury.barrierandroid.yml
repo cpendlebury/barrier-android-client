@@ -8,6 +8,9 @@ AuthorEmail:
 AuthorWebSite:
   - https://github.com/cpendlebury
 
+Categories:
+  - Network
+
 License:
   - GPL-2.0-only
 
@@ -29,7 +32,7 @@ Repo:
 Builds:
   - versionName: 0.1.1
     versionCode: 3
-    commit: 08c7d6f6c221744387bb899fcc884fc36fbef17d
+    commit: 0f61f9ea6ff7ec51a0df592c1b7663485c49869f
     gradle: yes
 
 AutoUpdateMode:
