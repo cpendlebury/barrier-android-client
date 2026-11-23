@@ -116,6 +116,10 @@ class BarrierForegroundService : Service() {
                 }
                 lock.acquire()
             }
+            BarrierAccessibilityService.log(
+                this@BarrierForegroundService,
+                "input event: ${event.javaClass.simpleName}; wakeLock held=${wakeLock?.isHeld}",
+            )
             connectionListener?.onInputEvent(event)
         }
 
