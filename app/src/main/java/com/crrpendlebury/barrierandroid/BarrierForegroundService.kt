@@ -105,6 +105,17 @@ class BarrierForegroundService : Service() {
         }
 
         override fun onInputEvent(event: BarrierInputEvent) {
+            // Host input can arrive while the screen is off or the device is
+            // locked. The wake lock was acquired at service start, which may
+            // have been while the screen was awake, so its ACQUIRE_CAUSES_WAKEUP
+            // effect was consumed then; re-arm it (release + acquire re-applies
+            // the flag) on input so the display can be woken by host input.
+            wakeLock?.let { lock ->
+                if (lock.isHeld) {
+                    lock.release()
+                }
+                lock.acquire()
+            }
             connectionListener?.onInputEvent(event)
         }
 
