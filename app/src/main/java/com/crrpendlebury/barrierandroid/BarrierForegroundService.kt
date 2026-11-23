@@ -111,10 +111,14 @@ class BarrierForegroundService : Service() {
             // have been while the screen was awake, so its ACQUIRE_CAUSES_WAKEUP
             // effect was consumed then; re-arm it (release + acquire re-applies
             // the flag) on input so the display can be woken by host input. The
-            // re-arm outcome and the keyguard state are logged per event so a
-            // retest can tell an unwoken display apart from a failed re-arm or
-            // from a keyguard that swallows the wake.
+            // re-arm outcome, the keyguard state, and the device-interactive
+            // state are logged per event so a retest can tell an unwoken display
+            // apart from a failed re-arm or from a keyguard that swallows the wake.
             val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val interactive = powerManager.isInteractive()
+            val keyguardLocked = keyguardManager.isKeyguardLocked()
+            val keyguardSecure = keyguardManager.isKeyguardSecure()
             wakeLock?.let { lock ->
                 val wasHeld = lock.isHeld
                 if (wasHeld) {
@@ -123,11 +127,11 @@ class BarrierForegroundService : Service() {
                 val acquired = lock.acquire()
                 BarrierAccessibilityService.log(
                     this@BarrierForegroundService,
-                    "input event: ${event.javaClass.simpleName}; wakeLock wasHeld=$wasHeld; acquire=$acquired; held=${lock.isHeld}; keyguardLocked=${keyguardManager.isKeyguardLocked()}; keyguardSecure=${keyguardManager.isKeyguardSecure()}",
+                    "input event: ${event.javaClass.simpleName}; wakeLock wasHeld=$wasHeld; acquire=$acquired; held=${lock.isHeld}; interactive=$interactive; keyguardLocked=$keyguardLocked; keyguardSecure=$keyguardSecure",
                 )
             } ?: BarrierAccessibilityService.log(
                 this@BarrierForegroundService,
-                "input event: ${event.javaClass.simpleName}; wakeLock absent; keyguardLocked=${keyguardManager.isKeyguardLocked()}; keyguardSecure=${keyguardManager.isKeyguardSecure()}",
+                "input event: ${event.javaClass.simpleName}; wakeLock absent; interactive=$interactive; keyguardLocked=$keyguardLocked; keyguardSecure=$keyguardSecure",
             )
             connectionListener?.onInputEvent(event)
         }

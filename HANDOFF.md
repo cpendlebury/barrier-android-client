@@ -53,6 +53,8 @@
 
 22. **Wake lock re-arm diagnostics (2026-11-24)**: `BarrierForegroundService` inbound input now logs the wake-lock re-arm outcome (`wasHeld`, `acquire`, `held`) plus keyguard state (`keyguardLocked`, `keyguardSecure`) per event, ahead of the previous `wakeLock held=` line, to the debug sink (`barrier_debug.log`). Retest context: the previous retest (fresh debug APK, Debug logging on) still showed `input event: MouseMove; wakeLock held=true` and no display wake; the investigation moved to the wake mechanism / keyguard. No fix landed yet; retest pending on the real personal device.
 
+23. **Wake lock re-arm diagnostics (follow-up, 2026-11-24)**: the same per-event log line now also carries `interactive=` from `PowerManager.isInteractive()` (device-interactive state) alongside the keyguard fields. API audit (`javap` on android-35) confirmed there is no public force-wake API on this compile SDK, so the wakelock with `ACQUIRE_CAUSES_WAKEUP` remains the only sanctioned wake mechanism; the retest should now correlate wake failure with `interactive=` and keyguard state. Build + unit tests green; docs (limitations, troubleshooting, handoff, plan) updated in the same edit. Retest pending.
+
 ## Protocol facts encoded (Barrier v2.4.0 / protocol v1.6)
 - Frame: u32 BE length + payload; command (4 chars; "Barrier" greeting = 7 chars), BE int16/int32 params, BE32 string length + UTF-8.
 - Handshake: server sends Hello → client sends HelloBack → server QINF → client DINF → server CIAK → server DSOP → CONNECTED.

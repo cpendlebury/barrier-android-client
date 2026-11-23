@@ -77,12 +77,13 @@ Workaround: use another file manager, such as Fossify File Manager.
 
 Symptom: the screen is off or locked, host input (mouse movement) arrives, but the display does not wake.
 
-Diagnostic: with the app's Debug logging enabled, inbound input is logged per event to the debug sink (`barrier_debug.log` in the external files dir), e.g. `input event: MouseMove; wakeLock wasHeld=true; acquire=true; held=true; keyguardLocked=false; keyguardSecure=false`. The wake lock is re-armed (release + acquire, which re-applies `ACQUIRE_CAUSES_WAKEUP`) before the event is dispatched, so a healthy retest should show `acquire=true` and `held=true` on every event.
+Diagnostic: with the app's Debug logging enabled, inbound input is logged per event to the debug sink (`barrier_debug.log` in the external files dir), e.g. `input event: MouseMove; wakeLock wasHeld=true; acquire=true; held=true; interactive=false; keyguardLocked=false; keyguardSecure=false`. The wake lock is re-armed (release + acquire, which re-applies `ACQUIRE_CAUSES_WAKEUP`) before the event is dispatched, so a healthy retest should show `acquire=true` and `held=true` on every event, alongside the device-interactive and keyguard state.
 
 Interpretation:
 
 - If no `input event:` lines appear at all, input delivery is the problem (the events never reach the accessibility service).
 - If the lines appear with `acquire=true; held=true` but the display still does not wake, the re-arm is not the blocker; the wake mechanism or the keyguard is. A logged `keyguardLocked=true` alongside an apparently armed wake lock points at the keyguard swallowing the wake, and the next retest should confirm whether the display turns on and the keyguard then re-engages.
+- The `interactive=` value is `PowerManager.isInteractive()`, which reports whether the device considers itself awake; it is logged per event so a retest can correlate the wake failure with the device state.
 
 Workaround: none yet. Retest with the latest debug APK (`adb install -r app/build/outputs/apk/debug/app-debug.apk` on the real device, Debug logging checked first).
 
