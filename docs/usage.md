@@ -15,6 +15,7 @@ The screen is a small form. The app now connects to a real Barrier server: the h
 | Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
 | Error line | `errorTextView` | Red text for connection errors, injection failures, disabled-service warnings |
 | Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
+| Server fingerprint | `serverFingerprintTextView` | SSL fingerprint of the server observed at handshake, rendered in Barrier's display form (uppercase, colon-separated pairs); `unavailable` before a TLS handshake completes, cleared on disconnect |
 
 The status line starts at `DISCONNECTED`. On a successful connection it transitions to `CONNECTED`. On failure it shows an error message.
 

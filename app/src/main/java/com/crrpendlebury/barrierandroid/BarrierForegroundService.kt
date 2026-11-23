@@ -112,6 +112,10 @@ class BarrierForegroundService : Service() {
             BarrierAccessibilityService.log(this@BarrierForegroundService, "client error: $error")
             connectionListener?.onError(error)
         }
+
+        override fun onServerFingerprintObserved(fingerprint: String?) {
+            connectionListener?.onServerFingerprintObserved(fingerprint)
+        }
     }
 
     var connectionListener: BarrierClientListener? = null
@@ -134,10 +138,14 @@ class BarrierForegroundService : Service() {
         BarrierAccessibilityService.log(this, "foreground service onStartCommand")
 
         // Acquire a partial wake lock so the CPU stays awake for keepalive
-        // and socket reads while the screen is off. Released in onDestroy.
+        // and socket reads while the screen is off, and so the display wakes
+        // while the session runs (ACQUIRE_CAUSES_WAKEUP). Released in onDestroy.
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BarrierAndroid::Connection").apply {
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "BarrierAndroid::Connection",
+            ).apply {
                 setReferenceCounted(false)
                 acquire() // Hold indefinitely while service runs
             }
@@ -201,6 +209,7 @@ class BarrierForegroundService : Service() {
                     override fun onStateChanged(state: BarrierClientState) = Unit
                     override fun onInputEvent(event: BarrierInputEvent) = Unit
                     override fun onError(error: BarrierError) = Unit
+                    override fun onServerFingerprintObserved(fingerprint: String?) = Unit
                 }
                 val pendingConn = PendingConnection(
                     host = host,

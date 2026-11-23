@@ -77,6 +77,7 @@ class BarrierClientTest {
                 inputEvents.add(event)
             }
             override fun onError(error: BarrierError) = Unit
+            override fun onServerFingerprintObserved(fingerprint: String?) = Unit
         }
         val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
 
@@ -124,6 +125,7 @@ class BarrierClientTest {
             override fun onStateChanged(state: BarrierClientState) { states.add(state) }
             override fun onInputEvent(event: BarrierInputEvent) = Unit
             override fun onError(error: BarrierError) = Unit
+            override fun onServerFingerprintObserved(fingerprint: String?) = Unit
         }
         val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
 
@@ -176,6 +178,7 @@ class BarrierClientTest {
             override fun onStateChanged(state: BarrierClientState) = Unit
             override fun onInputEvent(event: BarrierInputEvent) = Unit
             override fun onError(error: BarrierError) { errors.add(error) }
+            override fun onServerFingerprintObserved(fingerprint: String?) = Unit
         }
         val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
 
@@ -321,5 +324,29 @@ class BarrierClientTest {
         assertTrue(client.clipboardSharingEnabled)
         assertEquals(0, client.heartbeatSeconds)
         assertEquals(emptyList<Pair<Int, Int>>(), optionUpdates.last())
+    }
+
+    @Test
+    fun `client notifies server fingerprint observed after handshake`() = testScope.runTest {
+        val transport = FakeBarrierTransport()
+        val fingerprints = mutableListOf<String?>()
+        val listener = object : BarrierClientListener {
+            override fun onStateChanged(state: BarrierClientState) = Unit
+            override fun onInputEvent(event: BarrierInputEvent) = Unit
+            override fun onError(error: BarrierError) = Unit
+            override fun onServerFingerprintObserved(fingerprint: String?) { fingerprints.add(fingerprint) }
+        }
+        val client = BarrierClient(clientName = "AndroidBarrierClient", transport = transport, scope = backgroundScope, listener = listener)
+
+        backgroundScope.launch { client.connect(serverHost = "192.168.1.50", serverPort = 24800, useTls = false) }
+        runCurrent()
+        advanceUntilIdle()
+        transport.emit(BarrierPacket.SetOptionsPacket(options = emptyList()))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(BarrierClientState.CONNECTED, client.currentState)
+        // The fake transport does not run TLS, so the observed fingerprint is null.
+        assertEquals(listOf<String?>(null), fingerprints)
     }
 }

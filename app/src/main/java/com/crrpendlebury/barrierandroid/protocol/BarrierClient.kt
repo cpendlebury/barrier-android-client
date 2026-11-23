@@ -31,6 +31,10 @@ import java.util.concurrent.TimeUnit
  * [CONNECTING] and [HANDSHAKE] are stored in [currentState] and are not
  * delivered to [BarrierClientListener.onStateChanged].
  *
+ * Once the transport handshake completes, [BarrierClientListener.onServerFingerprintObserved]
+ * is invoked with the observed server fingerprint (null when the transport did
+ * not run TLS).
+ *
  * Reconnect runs only after [closeTransport] observed [BarrierClientState.CONNECTED].
  * [disconnect] sets [userInitiatedClose] and must not schedule another attempt.
  * The foreground service's listener forwards [BarrierClientState.DISCONNECTED]
@@ -571,6 +575,15 @@ class BarrierClient(
         listener?.onStateChanged(state)
     }
 
+    /**
+     * Forwards the server fingerprint observed by the transport's handshake to
+     * the listener, or null when the transport did not run TLS. Called from
+     * [performConnect] once per successful handshake.
+     */
+    private fun notifyServerFingerprintObserved(fingerprint: String?) {
+        listener?.onServerFingerprintObserved(fingerprint)
+    }
+
     private fun closeTransport() {
         stopKeepAlive()
         val wasConnected = state == BarrierClientState.CONNECTED
@@ -640,6 +653,11 @@ class BarrierClient(
             // Hello first and the client answers with HelloBack (see handleHello).
             // Sending our own Hello makes the server reply with EBAD.
             state = BarrierClientState.HANDSHAKE
+            // The transport has finished its handshake by now (the TLS
+            // handshake for TLS, nothing for plaintext), so the trust manager
+            // has recorded the server fingerprint. Surface it for display;
+            // reconnects run performConnect again and re-notify.
+            notifyServerFingerprintObserved(observedServerFingerprint)
         } catch (e: Exception) {
             notifyError(BarrierError.ConnectionFailed(e.message ?: "connection failed"))
             closeTransport()

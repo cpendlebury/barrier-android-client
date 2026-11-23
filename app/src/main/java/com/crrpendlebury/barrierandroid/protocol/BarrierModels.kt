@@ -141,4 +141,16 @@ interface BarrierClientListener {
     fun onInputEvent(event: BarrierInputEvent)
 
     fun onError(error: BarrierError)
+
+    /**
+     * Invoked when the TLS handshake completes and the server fingerprint is
+     * observed, or with a null fingerprint when the transport did not run TLS
+     * ([SocketBarrierTransport] clears the observed value for plaintext). The
+     * value is the SHA-256 fingerprint of the server leaf certificate, lowercase
+     * hex with no separators; render it for display with
+     * [BarrierServerTrustManager.format]. Invoked on the client's scope, not
+     * the main thread; implementations must hop to the main thread before
+     * touching views.
+     */
+    fun onServerFingerprintObserved(fingerprint: String?)
 }

@@ -54,6 +54,7 @@ import com.crrpendlebury.barrierandroid.protocol.BarrierClientState
 import com.crrpendlebury.barrierandroid.protocol.BarrierError
 import com.crrpendlebury.barrierandroid.protocol.BarrierInputEvent
 import com.crrpendlebury.barrierandroid.protocol.BarrierPacket
+import com.crrpendlebury.barrierandroid.protocol.BarrierServerTrustManager
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
 import com.crrpendlebury.barrierandroid.ime.BarrierIME
@@ -74,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var openKeyboardSettingsButton: Button
     private lateinit var errorTextView: TextView
     private lateinit var debugLoggingCheckBox: CheckBox
+    private lateinit var serverFingerprintTextView: TextView
 
     private var lastPointerX = 0f
     private var lastPointerY = 0f
@@ -98,6 +100,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else if (state == BarrierClientState.DISCONNECTED) {
                     ImeSwitcher.restore(this@MainActivity, leaving = true)
+                    updateServerFingerprint(null)
                 }
             }
         }
@@ -156,6 +159,12 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
             }
         }
+
+        override fun onServerFingerprintObserved(fingerprint: String?) {
+            runOnUiThread {
+                updateServerFingerprint(fingerprint)
+            }
+        }
     }
 
     private val prefs by lazy { getSharedPreferences("barrier_settings", Context.MODE_PRIVATE) }
@@ -175,6 +184,7 @@ class MainActivity : ComponentActivity() {
         openKeyboardSettingsButton = findViewById(R.id.openKeyboardSettingsButton)
         errorTextView = findViewById(R.id.errorTextView)
         debugLoggingCheckBox = findViewById(R.id.debugLoggingCheckBox)
+        serverFingerprintTextView = findViewById(R.id.serverFingerprintTextView)
         debugLoggingCheckBox.isChecked = prefs.getBoolean("debug_logging_enabled", false)
         debugLoggingCheckBox.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("debug_logging_enabled", isChecked).commit()
@@ -371,6 +381,11 @@ class MainActivity : ComponentActivity() {
 
     private fun updateStatus(state: BarrierClientState) {
         statusTextView.text = "Barrier state: $state"
+    }
+
+    private fun updateServerFingerprint(fingerprint: String?) {
+        val display = fingerprint?.let { BarrierServerTrustManager.format(it) } ?: "unavailable"
+        serverFingerprintTextView.text = "Server fingerprint: $display"
     }
 
     private fun updateStatus(error: BarrierError) {

@@ -10,7 +10,7 @@ There is no settings screen beyond the three fields on the main activity. The th
 | Port | `24800` (`DEFAULT_BARRIER_PORT`) | Barrier's usual port. Non-numeric text falls back to 24800; `0` is kept |
 | Client name | `AndroidBarrierClient` (`DEFAULT_CLIENT_NAME`) | Would be the HelloBack name and must match a screen name on the server, case-sensitive, if a handshake ever ran |
 
-There is no TLS switch. The service hardcodes `useTls = true` in both the transport constructor and `connect()`. The transport does honour that flag when passed to `connect` — a plain `java.net.Socket` for `useTls == false`, an `SSLSocket` whose server is authenticated by SHA-256 fingerprint (Barrier: `ENCRYPTED_AUTHENTICATED`) for `useTls == true`. The fingerprint is accepted on first use and then pinned; the UI always passes `true`, so plaintext is not reachable from the app. See [limitations](limitations.md).
+There is no TLS switch. The service hardcodes `useTls = true` in both the transport constructor and `connect()`. The transport does honour that flag when passed to `connect` — a plain `java.net.Socket` for `useTls == false`, an `SSLSocket` whose server is authenticated by SHA-256 fingerprint (Barrier: `ENCRYPTED_AUTHENTICATED`) for `useTls == true`. The fingerprint is accepted on first use and then pinned; the UI always passes `true`, so plaintext is not reachable from the app. The observed server fingerprint is surfaced through the client listener and displayed on the main screen (`serverFingerprintTextView`) in Barrier's display form (uppercase, colon-separated pairs). See [limitations](limitations.md).
 
 ## Server side
 
