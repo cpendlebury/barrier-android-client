@@ -73,6 +73,19 @@ Workaround: use another file manager, such as Fossify File Manager.
 - Mouse movement sends no gesture to the phone; only clicks and scrolls do. The injected position is mirrored onto a visible cursor overlay that adds a translucent window hosting a standard arrow in the accessibility service; the arrow is a classic pointer with a white fill and black outline so it stays visible on light and dark content.
 - Scroll direction and amount are not preserved (swipes down a fixed 200 px).
 
+### Screen does not wake
+
+Symptom: the screen is off or locked, host input (mouse movement) arrives, but the display does not wake.
+
+Diagnostic: with the app's Debug logging enabled, inbound input is logged per event to the debug sink (`barrier_debug.log` in the external files dir), e.g. `input event: MouseMove; wakeLock wasHeld=true; acquire=true; held=true; keyguardLocked=false; keyguardSecure=false`. The wake lock is re-armed (release + acquire, which re-applies `ACQUIRE_CAUSES_WAKEUP`) before the event is dispatched, so a healthy retest should show `acquire=true` and `held=true` on every event.
+
+Interpretation:
+
+- If no `input event:` lines appear at all, input delivery is the problem (the events never reach the accessibility service).
+- If the lines appear with `acquire=true; held=true` but the display still does not wake, the re-arm is not the blocker; the wake mechanism or the keyguard is. A logged `keyguardLocked=true` alongside an apparently armed wake lock points at the keyguard swallowing the wake, and the next retest should confirm whether the display turns on and the keyguard then re-engages.
+
+Workaround: none yet. Retest with the latest debug APK (`adb install -r app/build/outputs/apk/debug/app-debug.apk` on the real device, Debug logging checked first).
+
 ## Build issues
 
 ### `androidx.appcompat` not cached

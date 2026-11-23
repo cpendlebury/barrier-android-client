@@ -103,6 +103,8 @@ Socket read errors now invoke `onConnectionLost`, which calls `BarrierClient.clo
 
 A partial wake lock and a WiFi lock are now acquired in `onStartCommand` and released in `onDestroy`, keeping the CPU and WiFi awake for keepalive and socket reads while the screen is off, and waking the display while a session is running (`ACQUIRE_CAUSES_WAKEUP`). The app requests battery optimization exemption on resume. A `ConnectivityManager` callback detects network changes and closes the transport so the reconnect loop can retry. Settings are persisted to SharedPreferences on every text change and on pause, using synchronous `commit()`, so they survive process death. The activity re-attaches to a running service on recreation. The service attempts to reconnect from saved settings on restart.
 
+On inbound input the service re-arms the partial wake lock (release + acquire, which re-applies the `ACQUIRE_CAUSES_WAKEUP` flag) before dispatching, and logs the re-arm outcome plus keyguard state per event. Whether host mouse movement wakes a locked display is still under on-device retest; see [troubleshooting](troubleshooting.md).
+
 The foreground service notification text reflects connection state: it reads "Waiting for Barrier server" while no client is connected, is updated to "Barrier: connected" on `CONNECTED`, and moves to reconnecting text after `DISCONNECTED`. It is updated via the client listener.
 
 ## Other leftovers

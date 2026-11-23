@@ -1,5 +1,6 @@
 package com.crrpendlebury.barrierandroid
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -109,16 +110,24 @@ class BarrierForegroundService : Service() {
             // locked. The wake lock was acquired at service start, which may
             // have been while the screen was awake, so its ACQUIRE_CAUSES_WAKEUP
             // effect was consumed then; re-arm it (release + acquire re-applies
-            // the flag) on input so the display can be woken by host input.
+            // the flag) on input so the display can be woken by host input. The
+            // re-arm outcome and the keyguard state are logged per event so a
+            // retest can tell an unwoken display apart from a failed re-arm or
+            // from a keyguard that swallows the wake.
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             wakeLock?.let { lock ->
-                if (lock.isHeld) {
+                val wasHeld = lock.isHeld
+                if (wasHeld) {
                     lock.release()
                 }
-                lock.acquire()
-            }
-            BarrierAccessibilityService.log(
+                val acquired = lock.acquire()
+                BarrierAccessibilityService.log(
+                    this@BarrierForegroundService,
+                    "input event: ${event.javaClass.simpleName}; wakeLock wasHeld=$wasHeld; acquire=$acquired; held=${lock.isHeld}; keyguardLocked=${keyguardManager.isKeyguardLocked()}; keyguardSecure=${keyguardManager.isKeyguardSecure()}",
+                )
+            } ?: BarrierAccessibilityService.log(
                 this@BarrierForegroundService,
-                "input event: ${event.javaClass.simpleName}; wakeLock held=${wakeLock?.isHeld}",
+                "input event: ${event.javaClass.simpleName}; wakeLock absent; keyguardLocked=${keyguardManager.isKeyguardLocked()}; keyguardSecure=${keyguardManager.isKeyguardSecure()}",
             )
             connectionListener?.onInputEvent(event)
         }
