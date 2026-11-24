@@ -771,7 +771,11 @@ class BarrierAccessibilityService : AccessibilityService() {
                 .getBoolean(DEBUG_LOGGING_ENABLED_KEY, false)
 
         private fun logVerbose(context: Context, message: String) {
-            log(context, message)
+            // Verbose (per-event / per-draw) logging only while the user-facing
+            // debug toggle is on; lifecycle lines go through [log] directly.
+            if (isDebugLoggingEnabled(context)) {
+                log(context, message)
+            }
         }
 
         /**
