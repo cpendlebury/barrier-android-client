@@ -22,7 +22,7 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 
 - **Protocol client** — full Barrier v1.6 handshake, keepalive, input events, clipboard, screensaver, options, reconnect
 - **TCP/TLS transport** — plain socket or TLS (server authenticated by SHA-256 fingerprint, Barrier's `ENCRYPTED_AUTHENTICATED`); the observed server fingerprint is displayed in the app
-- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, scroll, and press/move/release drags via continuing strokes; movement sends no gesture); visible cursor overlay mirrors injected position. Host wheel events become signed scroll gestures (positive `yDelta` scrolls down, negative scrolls up; flat 200 px per event). Host Back/Forward mouse buttons route to the BACK global action (Back) and are declined (Forward); unmapped buttons keep the tap behaviour.
+- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, scroll, and press/move/release drags via continuing strokes; movement sends no gesture); visible cursor overlay mirrors injected position. Host wheel events become signed scroll gestures (positive `yDelta` scrolls down, negative scrolls up; flat 200 px per event). Host Back/Forward mouse buttons route to the BACK global action (Back; mapped via `BACK_MOUSE_BUTTON` and `RIGHT_MOUSE_BUTTON`) and are declined (Forward); unmapped buttons keep the tap behaviour.
 - **Text injection** — clipboard push stores into the device clipboard; delivery into a focused field happens via explicit paste (`ACTION_SET_TEXT` retained as the field-level primitive)
 - **Navigation keys** — Back, Home, Recents via framework global actions
 - **Clipboard sync** — CCLP/DCLP round-trip via `ClipboardManager`

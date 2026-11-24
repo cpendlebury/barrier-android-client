@@ -71,7 +71,7 @@ Workaround: use another file manager, such as Fossify File Manager.
 ## Mouse movement issues
 
 - Mouse movement sends no gesture to the phone; only clicks and scrolls do. The injected position is mirrored onto a visible cursor overlay that adds a translucent window hosting a standard arrow in the accessibility service; the arrow is a classic pointer with a white fill and black outline so it stays visible on light and dark content.
-- Scroll direction is now taken from the host wheel deltas: a positive `yDelta` scrolls down, a negative `yDelta` scrolls up, and `xDelta` drives horizontal scroll; the scroll itself is a fixed 200 px swipe over 100 ms. The per-event distance is flat because `GestureDescription` carries no axis or delta data. Host mouse Back button presses fire the BACK global action via the accessibility service; Forward presses are declined (no public forward action).
+- Scroll direction is now taken from the host wheel deltas: a positive `yDelta` scrolls down, a negative `yDelta` scrolls up, and `xDelta` drives horizontal scroll; the scroll itself is a fixed 200 px swipe over 100 ms. The per-event distance is flat because `GestureDescription` carries no axis or delta data. Host mouse Back button presses (mapped via `BACK_MOUSE_BUTTON` and `RIGHT_MOUSE_BUTTON`) fire the BACK global action via the accessibility service; Forward presses are declined (no public forward action). Right-click is therefore a back press for this host, not a click.
 
 ### Screen does not wake
 

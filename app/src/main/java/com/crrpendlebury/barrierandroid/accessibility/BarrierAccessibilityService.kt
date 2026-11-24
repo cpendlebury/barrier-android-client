@@ -699,11 +699,19 @@ class BarrierAccessibilityService : AccessibilityService() {
     companion object {
         /**
          * Host mouse back button id carried by the `DMDN` / `DMUP` `button`
-         * field. Maps to the BACK navigation global action via [injectBack]. The
-         * value is the host driver's back button number in the server's button
-         * space; pending on-device retest to confirm it against a real host mouse.
+         * field. Maps to the BACK navigation global action via [injectBack].
+         * The value is the host driver's back button number in the server's
+         * button space; pending on-device retest to confirm it against a real host
+         * mouse. Also treated as Back when the host reports the right mouse
+         * button (`MOUSE_BUTTON_RIGHT`), which this host uses as its Back button.
          */
         const val BACK_MOUSE_BUTTON = 8
+
+        /**
+         * Host mouse right button id (`DMDN` / `DMUP` `button` field) that this
+         * host uses as the Back button (the host's `ButtonRight` mapping).
+         */
+        const val RIGHT_MOUSE_BUTTON = 2
 
         /**
          * Host mouse forward button id carried by the `DMDN` / `DMUP` `button`

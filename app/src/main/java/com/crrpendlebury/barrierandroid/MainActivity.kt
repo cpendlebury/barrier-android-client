@@ -137,7 +137,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is BarrierInputEvent.MouseButtonDown -> {
-                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON) {
+                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON ||
+                        event.button == BarrierAccessibilityService.RIGHT_MOUSE_BUTTON
+                    ) {
                         service.injectBack()
                     } else if (event.button == BarrierAccessibilityService.FORWARD_MOUSE_BUTTON) {
                         service.injectForward()
@@ -147,7 +149,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is BarrierInputEvent.MouseButtonUp -> {
-                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON) {
+                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON ||
+                        event.button == BarrierAccessibilityService.RIGHT_MOUSE_BUTTON
+                    ) {
                         // The back press already fired the BACK action on down; the
                         // release is a no-op and must not fire a click.
                     } else if (event.button == BarrierAccessibilityService.FORWARD_MOUSE_BUTTON) {

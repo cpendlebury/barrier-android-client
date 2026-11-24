@@ -57,7 +57,7 @@ Mouse movement does not send any gesture to the phone. The injected position is 
 
 ## Mouse buttons
 
-Host mouse buttons arrive as `MouseButtonDown` / `MouseButtonUp` events carrying the `button` field. The Back button (`BarrierAccessibilityService.BACK_MOUSE_BUTTON`) fires the BACK global action (`injectBack`), so a host back press navigates back; the release is a no-op and does not fire a click. The Forward button (`BarrierAccessibilityService.FORWARD_MOUSE_BUTTON`) is routed to `injectForward`, which declines because no public forward navigation action exists. Buttons that do not match those ids keep the existing tap behaviour (press/release = click at the tracked position).
+Host mouse buttons arrive as `MouseButtonDown` / `MouseButtonUp` events carrying the `button` field. The Back mapping (`BarrierAccessibilityService.BACK_MOUSE_BUTTON`) plus `BarrierAccessibilityService.RIGHT_MOUSE_BUTTON` (this host uses the right mouse button as its Back button) fires the BACK global action (`injectBack`), so a host back press navigates back; the release is a no-op and does not fire a click. The Forward button (`BarrierAccessibilityService.FORWARD_MOUSE_BUTTON`) is routed to `injectForward`, which declines because no public forward navigation action exists. Buttons that do not match those ids keep the existing tap behaviour (press/release = click at the tracked position).
 
 ## Mouse wheel scrolling
 
