@@ -59,6 +59,8 @@ import com.crrpendlebury.barrierandroid.protocol.DEFAULT_BARRIER_PORT
 import com.crrpendlebury.barrierandroid.protocol.DEFAULT_CLIENT_NAME
 import com.crrpendlebury.barrierandroid.ime.BarrierIME
 import com.crrpendlebury.barrierandroid.ime.BarrierKeyMap
+import com.crrpendlebury.barrierandroid.ime.HostShortcut
+import com.crrpendlebury.barrierandroid.ime.HostShortcuts
 import com.crrpendlebury.barrierandroid.ime.ImeSwitcher
 
 class MainActivity : ComponentActivity() {
@@ -168,7 +170,7 @@ class MainActivity : ComponentActivity() {
 
                 is BarrierInputEvent.KeyDown -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN)
 
-                is BarrierInputEvent.KeyRepeat -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN)
+                is BarrierInputEvent.KeyRepeat -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN, isRepeat = true)
 
                 is BarrierInputEvent.KeyUp -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_UP)
             }
@@ -215,6 +217,9 @@ class MainActivity : ComponentActivity() {
         debugLoggingCheckBox.isChecked = prefs.getBoolean("debug_logging_enabled", false)
         debugLoggingCheckBox.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("debug_logging_enabled", isChecked).commit()
+            if (!isChecked) {
+                BarrierAccessibilityService.clearDebugLog(this)
+            }
         }
 
         connectButton.setOnClickListener { connectToBarrierServer() }
@@ -459,8 +464,15 @@ class MainActivity : ComponentActivity() {
      * method, falling back to the accessibility service's global-action path
      * (Back/Home/Recents) otherwise. Modifier state is tracked from the Barrier
      * modifier mask and applied to the committed/sent key.
+     *
+     * Host shortcuts (Meta+H, Alt+Tab, Print Screen, ...) are checked first and
+     * run as phone system actions with no IME needed. A matched chord swallows
+     * its key-up, and [isRepeat] stops a held chord from firing twice. Printable
+     * keys held with Ctrl, Alt, or Meta go to the focused field as key events
+     * (for example Ctrl+L), so the app's own shortcuts can see them; with no
+     * focused field there is no input connection and they are not delivered.
      */
-    private fun handleBarrierKey(keyId: Int, modifierMask: Int, action: Int) {
+    private fun handleBarrierKey(keyId: Int, modifierMask: Int, action: Int, isRepeat: Boolean = false) {
         val ime = BarrierIME.instance
         val conn = ime?.connection
         val isDown = action == KeyEvent.ACTION_DOWN
@@ -468,6 +480,14 @@ class MainActivity : ComponentActivity() {
             this,
             "handleBarrierKey keyId=0x${keyId.toString(16)} mask=$modifierMask action=$action ime=${ime != null} conn=${conn != null}",
         )
+
+        HostShortcuts.match(keyId, modifierMask)?.let { shortcut ->
+            if (isDown && !isRepeat) {
+                runHostShortcut(shortcut)
+            }
+            return
+        }
+
         // If the IME is enabled but not bound, try to switch again.
         if (ime == null && isBarrierImeEnabled()) {
             ImeSwitcher.useOurs(this)
@@ -529,7 +549,11 @@ class MainActivity : ComponentActivity() {
         val shift = (modifierMask and 0x0001) != 0
 
         if (BarrierKeyMap.isPrintable(keyId)) {
-            if (isDown) {
+            val chord = (modifierMask and CHORD_MODIFIER_MASK) != 0
+            val code = BarrierKeyMap.keyCodeForPrintable(keyId)
+            if (chord && code != 0) {
+                ime?.sendKey(code, ime.metaState, isDown)
+            } else if (isDown) {
                 BarrierKeyMap.charFor(keyId, shift)?.let { ime?.commitText(it.toString()) }
             }
         } else {
@@ -539,5 +563,30 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (!isDown) ime?.clearModifiers()
+    }
+
+    /**
+     * Runs a phone system action for a host chord through the accessibility
+     * service's global actions. Logged so a retest can tell a matched chord
+     * apart from a rejected action; `performGlobalAction` returns false on
+     * devices where an action is not available (lock screen and screenshot need
+     * API 28).
+     */
+    private fun runHostShortcut(shortcut: HostShortcut) {
+        val globalAction = when (shortcut) {
+            HostShortcut.HOME -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+            HostShortcut.RECENTS -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+            HostShortcut.NOTIFICATIONS -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            HostShortcut.QUICK_SETTINGS -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            HostShortcut.LOCK_SCREEN -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN
+            HostShortcut.SCREENSHOT -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT
+        }
+        val accepted = BarrierAccessibilityService.instance?.injectGlobalAction(globalAction) ?: false
+        BarrierAccessibilityService.log(this, "host shortcut $shortcut accepted=$accepted")
+    }
+
+    private companion object {
+        /** Barrier Control, Alt, Meta, and Super bits. A printable key with any of these is a chord. */
+        const val CHORD_MODIFIER_MASK = 0x0002 or 0x0004 or 0x0008 or 0x0010
     }
 }

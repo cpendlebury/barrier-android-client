@@ -57,13 +57,19 @@ Mouse movement does not send any gesture to the phone. The injected position is 
 
 ## Mouse buttons
 
-Host mouse buttons arrive as `MouseButtonDown` / `MouseButtonUp` events carrying the `button` field. The Back mapping (`BarrierAccessibilityService.BACK_MOUSE_BUTTON`) plus `BarrierAccessibilityService.RIGHT_MOUSE_BUTTON` (this host uses the right mouse button as its Back button) fires the BACK global action (`injectBack`), so a host back press navigates back; the release is a no-op and does not fire a click. The Forward button (`BarrierAccessibilityService.FORWARD_MOUSE_BUTTON`) is routed to `injectForward`, which declines because no public forward navigation action exists. Buttons that do not match those ids keep the existing tap behaviour (press/release = click at the tracked position).
+Host mouse buttons arrive as `MouseButtonDown` / `MouseButtonUp` events carrying the `button` field, numbered as Barrier numbers them: 1 left, 2 middle, 3 right, 4 and 5 the extra back and forward buttons. Right click (3) and the back button (4) fire the BACK global action (`injectBack`), so the host's Back navigates back; the release is a no-op and does not fire a click. The forward button (5) is routed to `injectForward`, which declines because no public forward navigation action exists. Left and middle buttons keep the tap behaviour (press/release = click at the tracked position).
 
 ## Mouse wheel scrolling
 
-Host wheel events (`DMWM`) arrive as `BarrierInputEvent.MouseWheel` with signed `xDelta` / `yDelta`. The client maps them onto a scroll gesture through the accessibility service: a positive `yDelta` scrolls content down (wheel down / toward newer content), a negative `yDelta` scrolls up (wheel up / toward older content); horizontal scroll follows the sign of `xDelta`. The scroll is a 200 px swipe over 100 ms dispatched via the accessibility gesture path, landed at the tracked pointer position.
+Host wheel events (`DMWM`) arrive as `BarrierInputEvent.MouseWheel` with signed `xDelta` / `yDelta`. Barrier sends +120 for wheel forward (away from the user, page scrolls up) and -120 for wheel back. The client maps a positive `yDelta` to a finger-down swipe, so the page scrolls up, and a negative `yDelta` to a finger-up swipe, so the page scrolls down. Horizontal scroll follows the sign of `xDelta`. Each event is a 200 px swipe over 100 ms at the tracked pointer position, clamped to stay on screen.
 
 The scroll is a synthetic swipe because `GestureDescription` cannot carry axis or delta data, so the signed delta becomes the scroll direction and the per-event distance stays a flat 200 px. Scrolling through browsers, social apps, email, and chat is implemented on this path but not yet validated on device.
+
+## Keyboard shortcuts
+
+Host chords that map to phone system actions run without the Barrier keyboard being active: Meta+H or Meta+Enter (Home), Alt+Tab or Meta+Tab (recent apps), Meta+N (notification shade), Meta+S (quick settings), Meta+L (lock screen, Android 9+), and Meta+Ctrl+S or Print Screen (screenshot, Android 9+). Escape is Back as before.
+
+Ctrl, Alt, and Meta combined with a letter or digit (for example Ctrl+L) are delivered to the focused text field as key events, so an app's own shortcut can handle them. This needs a focused text field. The Meta key alone (app drawer), Meta+A (assistant), and Meta+/ (keyboard shortcuts) are not mapped; Android has no public action for them.
 
 ## What a real session still needs
 

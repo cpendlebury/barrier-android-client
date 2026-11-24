@@ -107,4 +107,32 @@ object BarrierKeyMap {
     /** True if [keyId] is Back (Escape or Alt+Left) — handled as Android Back. */
     fun isBackKey(keyId: Int, mask: Int): Boolean =
         keyId == 0xEF1B || (keyId == 0xEF51 && (mask and 0x0004) != 0)
+
+    /**
+     * Android key code for a printable ASCII character, for delivering a chord
+     * such as Ctrl+L as a real key event rather than committed text. Returns 0
+     * for characters with no key code in this table.
+     *
+     * Letters and digits map by offset from the first key code. Shift is not
+     * applied here; the caller sends the shift state through the event's meta
+     * state.
+     */
+    fun keyCodeForPrintable(keyId: Int): Int = when (keyId) {
+        in 0x61..0x7A -> KeyEvent.KEYCODE_A + (keyId - 0x61)
+        in 0x41..0x5A -> KeyEvent.KEYCODE_A + (keyId - 0x41)
+        in 0x30..0x39 -> KeyEvent.KEYCODE_0 + (keyId - 0x30)
+        0x20 -> KeyEvent.KEYCODE_SPACE
+        0x2C -> KeyEvent.KEYCODE_COMMA
+        0x2D -> KeyEvent.KEYCODE_MINUS
+        0x2E -> KeyEvent.KEYCODE_PERIOD
+        0x2F -> KeyEvent.KEYCODE_SLASH
+        0x3B -> KeyEvent.KEYCODE_SEMICOLON
+        0x3D -> KeyEvent.KEYCODE_EQUALS
+        0x5B -> KeyEvent.KEYCODE_LEFT_BRACKET
+        0x5C -> KeyEvent.KEYCODE_BACKSLASH
+        0x5D -> KeyEvent.KEYCODE_RIGHT_BRACKET
+        0x60 -> KeyEvent.KEYCODE_GRAVE
+        0x27 -> KeyEvent.KEYCODE_APOSTROPHE
+        else -> 0
+    }
 }

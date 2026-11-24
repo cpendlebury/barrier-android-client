@@ -78,6 +78,18 @@ class BarrierForegroundService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var wakeLock: PowerManager.WakeLock? = null
+
+    /**
+     * Screen-wake lock: `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`, the
+     * only combination the PowerManager documentation allows for waking the
+     * screen from a wake lock. It is not reference-counted and is acquired with
+     * a timeout on each inbound input event ([SCREEN_WAKE_HOLD_MS]), so the
+     * screen is held on briefly and then released. Both constants are deprecated
+     * in API 33; they remain the only wake-lock route that does not need a
+     * full-screen intent or activity launch from the background.
+     */
+    @Suppress("DEPRECATION")
+    private var screenWakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -105,33 +117,32 @@ class BarrierForegroundService : Service() {
             connectionListener?.onStateChanged(state)
         }
 
+        @Suppress("DEPRECATION")
         override fun onInputEvent(event: BarrierInputEvent) {
-            // Host input can arrive while the screen is off or the device is
-            // locked. The wake lock was acquired at service start, which may
-            // have been while the screen was awake, so its ACQUIRE_CAUSES_WAKEUP
-            // effect was consumed then; re-arm it (release + acquire re-applies
-            // the flag) on input so the display can be woken by host input. The
-            // re-arm outcome, the keyguard state, and the device-interactive
-            // state are logged per event so a retest can tell an unwoken display
-            // apart from a failed re-arm or from a keyguard that swallows the wake.
+            // locked. The screen is woken by a timed SCREEN_BRIGHT wake lock
+            // with ACQUIRE_CAUSES_WAKEUP, re-acquired on each input event. The
+            // previous PARTIAL_WAKE_LOCK plus ACQUIRE_CAUSES_WAKEUP combination
+            // is not valid (the flag cannot be combined with a partial lock), so
+            // it never woke the display. A keyguard still needs the user to
+            // unlock; the wake lock does not dismiss it.
             val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             val interactive = powerManager.isInteractive()
             val keyguardLocked = keyguardManager.isKeyguardLocked()
             val keyguardSecure = keyguardManager.isKeyguardSecure()
-            wakeLock?.let { lock ->
-                val wasHeld = lock.isHeld
-                if (wasHeld) {
-                    lock.release()
-                }
-                val acquired = lock.acquire()
-                BarrierAccessibilityService.log(
-                    this@BarrierForegroundService,
-                    "input event: ${event.javaClass.simpleName}; wakeLock wasHeld=$wasHeld; acquire=$acquired; held=${lock.isHeld}; interactive=$interactive; keyguardLocked=$keyguardLocked; keyguardSecure=$keyguardSecure",
-                )
-            } ?: BarrierAccessibilityService.log(
+            val lock = screenWakeLock ?: powerManager.newWakeLock(
+                @Suppress("DEPRECATION")
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "BarrierAndroid::InputWake",
+            ).apply { setReferenceCounted(false) }.also { screenWakeLock = it }
+            val wasHeld = lock.isHeld
+            if (wasHeld) {
+                lock.release()
+            }
+            lock.acquire(SCREEN_WAKE_HOLD_MS)
+            BarrierAccessibilityService.log(
                 this@BarrierForegroundService,
-                "input event: ${event.javaClass.simpleName}; wakeLock absent; interactive=$interactive; keyguardLocked=$keyguardLocked; keyguardSecure=$keyguardSecure",
+                "input event: ${event.javaClass.simpleName}; screenWake wasHeld=$wasHeld; held=${lock.isHeld}; interactive=$interactive; keyguardLocked=$keyguardLocked; keyguardSecure=$keyguardSecure",
             )
             connectionListener?.onInputEvent(event)
         }
@@ -166,12 +177,14 @@ class BarrierForegroundService : Service() {
         BarrierAccessibilityService.log(this, "foreground service onStartCommand")
 
         // Acquire a partial wake lock so the CPU stays awake for keepalive
-        // and socket reads while the screen is off, and so the display wakes
-        // while the session runs (ACQUIRE_CAUSES_WAKEUP). Released in onDestroy.
+        // and socket reads while the screen is off. It must not carry
+        // ACQUIRE_CAUSES_WAKEUP: the PowerManager documentation says that flag
+        // cannot be used with PARTIAL_WAKE_LOCK, so the earlier combination
+        // never turned the screen on. Released in onDestroy.
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                PowerManager.PARTIAL_WAKE_LOCK,
                 "BarrierAndroid::Connection",
             ).apply {
                 setReferenceCounted(false)
@@ -269,6 +282,8 @@ class BarrierForegroundService : Service() {
         serviceScope.cancel()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        screenWakeLock?.let { if (it.isHeld) it.release() }
+        screenWakeLock = null
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
         networkCallback?.let {
@@ -410,6 +425,14 @@ class BarrierForegroundService : Service() {
 
     companion object {
         const val FOREGROUND_NOTIFICATION_ID = 1
+
+        /**
+         * How long each inbound input event holds the screen on through the
+         * screen-wake lock. The lock is timed, so it releases on its own; a new
+         * event re-acquires it. Long enough for the host's pointer to reach the
+         * phone's display, short enough not to drain the battery while idle.
+         */
+        const val SCREEN_WAKE_HOLD_MS = 5_000L
         const val CHANNEL_ID = "barrier_foreground_service"
 
         /**

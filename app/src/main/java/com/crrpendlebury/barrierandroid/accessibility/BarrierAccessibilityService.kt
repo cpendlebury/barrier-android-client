@@ -159,12 +159,12 @@ class BarrierAccessibilityService : AccessibilityService() {
      *   clicks already land on the tracked position.
      * - [android.view.MotionEvent.ACTION_SCROLL]: a scroll gesture. The host
      *   wheel deltas arrive as [scrollXDelta] / [scrollYDelta] and select the
-     *   direction: a positive delta scrolls content down (the gesture stroke
-     *   ends above its start), a negative delta scrolls up (the stroke ends
-     *   below it). The distance is one [SCROLL_DISTANCE_PX] step per scroll
-     *   event; [GestureDescription] carries no axis or delta data, so the
-     *   signed delta is expressed as the direction of the scroll stroke. A
-     *   both-zero delta is a no-op and dispatches nothing.
+     *   direction: a positive `yDelta` (wheel forward) moves the finger down so
+     *   the page scrolls up, and a negative `yDelta` (wheel back) scrolls down.
+     *   The distance is one [SCROLL_DISTANCE_PX] step per scroll event;
+     *   [GestureDescription] carries no axis or delta data, so the signed delta
+     *   is expressed as the direction of the stroke. A both-zero delta is a
+     *   no-op and dispatches nothing.
      * - anything else: treated as a tap at (x, y).
      *
      * [action] is now consulted. Earlier versions ignored it, and the scroll
@@ -301,18 +301,18 @@ class BarrierAccessibilityService : AccessibilityService() {
     /**
      * Builds the scroll gesture for one host wheel event.
      *
-     * Content travels opposite the injected stroke: a wheel delta that scrolls
-     * down (positive) moves content up, so the stroke ends above its start; a
-     * negative delta scrolls up and the stroke ends below it. [GestureDescription]
-     * carries no axis or delta data, so the signed delta is expressed as the
-     * direction of a straight scroll stroke, one [SCROLL_DISTANCE_PX] step per
-     * scroll event. A both-zero delta means there is nothing to scroll and no
-     * gesture is produced.
+     * The host's wheel deltas follow Barrier's convention (`XWindowsScreen`):
+     * a positive `yDelta` is wheel forward (away from the user, page scrolls up),
+     * a negative one is wheel back. A positive `xDelta` is wheel right. The page
+     * content moves opposite to the finger, so a wheel-forward event needs the
+     * finger to move down (stroke ends below its start). [GestureDescription]
+     * carries no axis or delta data, so the signed delta sets the direction of a
+     * straight stroke of [SCROLL_DISTANCE_PX] per event. A both-zero delta means
+     * there is nothing to scroll and no gesture is produced.
      *
-     * The path bounds must not be negative; a scroll arriving near the top (or
-     * left) of the display (small or negative origin) would otherwise throw an
-     * `IllegalArgumentException` and kill the process, so both ends are clamped
-     * to the non-negative quadrant.
+     * The stroke start is clamped so both ends lie on the display. An anchor near
+     * an edge would otherwise put the end off-screen and the gesture would be
+     * dropped silently, which looked like scrolling in one direction only.
      *
      * @return the scroll gesture, or null when both deltas are zero (no scroll).
      */
@@ -320,10 +320,11 @@ class BarrierAccessibilityService : AccessibilityService() {
         if (scrollXDelta == 0f && scrollYDelta == 0f) {
             return null
         }
-        val startX = if (x < 0f) 0f else x
-        val startY = if (y < 0f) 0f else y
-        val endX = (startX - SCROLL_DISTANCE_PX * sign(scrollXDelta)).coerceAtLeast(0f)
-        val endY = (startY - SCROLL_DISTANCE_PX * sign(scrollYDelta)).coerceAtLeast(0f)
+        val metrics = resources.displayMetrics
+        val startX = x.coerceIn(SCROLL_DISTANCE_PX, metrics.widthPixels - SCROLL_DISTANCE_PX)
+        val startY = y.coerceIn(SCROLL_DISTANCE_PX, metrics.heightPixels - SCROLL_DISTANCE_PX)
+        val endX = startX - SCROLL_DISTANCE_PX * sign(scrollXDelta)
+        val endY = startY + SCROLL_DISTANCE_PX * sign(scrollYDelta)
         val path = Path().apply {
             moveTo(startX, startY)
             lineTo(endX, endY)
@@ -698,28 +699,28 @@ class BarrierAccessibilityService : AccessibilityService() {
 
     companion object {
         /**
-         * Host mouse back button id carried by the `DMDN` / `DMUP` `button`
-         * field. Maps to the BACK navigation global action via [injectBack].
-         * The value is the host driver's back button number in the server's
-         * button space; pending on-device retest to confirm it against a real host
-         * mouse. Also treated as Back when the host reports the right mouse
-         * button (`MOUSE_BUTTON_RIGHT`), which this host uses as its Back button.
+         * Barrier mouse button 4 (`kButtonExtra0`), carried by the `DMDN` /
+         * `DMUP` `button` field. The server sends it for the mouse's back
+         * button (X11 button 8). Maps to the BACK navigation global action via
+         * [injectBack]. Confirmed against Barrier's `ButtonTypes` and
+         * `XWindowsScreen::mapButtonFromX`.
          */
-        const val BACK_MOUSE_BUTTON = 8
+        const val BACK_MOUSE_BUTTON = 4
 
         /**
-         * Host mouse right button id (`DMDN` / `DMUP` `button` field) that this
-         * host uses as the Back button (the host's `ButtonRight` mapping).
+         * Barrier mouse button 3 (`kButtonRight`). This host maps its Back
+         * action to the right mouse button, so right-click performs [injectBack].
+         * Barrier numbers buttons 1 = left, 2 = middle, 3 = right; an earlier
+         * build used 2 here, which is the middle button, and right-click clicked.
          */
-        const val RIGHT_MOUSE_BUTTON = 2
+        const val RIGHT_MOUSE_BUTTON = 3
 
         /**
-         * Host mouse forward button id carried by the `DMDN` / `DMUP` `button`
-         * field. Maps to [injectForward]. The value is the host driver's forward
-         * button number in the server's button space; pending on-device retest to
-         * confirm it against a real host mouse.
+         * Barrier mouse button 5 (`kButtonExtra1`), the mouse's forward button
+         * (X11 button 9). Maps to [injectForward], which declines because no
+         * public forward navigation action exists on this SDK.
          */
-        const val FORWARD_MOUSE_BUTTON = 9
+        const val FORWARD_MOUSE_BUTTON = 5
 
         private const val DISPLAY_ID = 0
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
@@ -814,6 +815,17 @@ class BarrierAccessibilityService : AccessibilityService() {
                 }
             } catch (t: Throwable) {
                 // Debug sink only: a log write failure must not interrupt input.
+            }
+        }
+
+        /**
+         * Deletes the debug log file. Called when the user unchecks Debug logging,
+         * so a log from an earlier session is not left behind and mistaken for
+         * current output. [log] itself writes nothing while the toggle is off.
+         */
+        fun clearDebugLog(context: Context) {
+            runCatching {
+                context.getExternalFilesDir(null)?.let { File(it, LOG_FILE_NAME).delete() }
             }
         }
 

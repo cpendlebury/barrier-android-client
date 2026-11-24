@@ -71,21 +71,24 @@ Workaround: use another file manager, such as Fossify File Manager.
 ## Mouse movement issues
 
 - Mouse movement sends no gesture to the phone; only clicks and scrolls do. The injected position is mirrored onto a visible cursor overlay that adds a translucent window hosting a standard arrow in the accessibility service; the arrow is a classic pointer with a white fill and black outline so it stays visible on light and dark content.
-- Scroll direction is now taken from the host wheel deltas: a positive `yDelta` scrolls down, a negative `yDelta` scrolls up, and `xDelta` drives horizontal scroll; the scroll itself is a fixed 200 px swipe over 100 ms. The per-event distance is flat because `GestureDescription` carries no axis or delta data. Host mouse Back button presses (mapped via `BACK_MOUSE_BUTTON` and `RIGHT_MOUSE_BUTTON`) fire the BACK global action via the accessibility service; Forward presses are declined (no public forward action). Right-click is therefore a back press for this host, not a click.
+- Scroll direction comes from the host wheel deltas: wheel forward (`yDelta` positive) scrolls the page up, wheel back scrolls it down, and `xDelta` drives horizontal scroll. Each event is a fixed 200 px swipe over 100 ms because `GestureDescription` carries no axis or delta data. Host right click (3) and the back button (4) fire the BACK global action; the forward button (5) is declined (no public forward action). Host Meta/Alt chords map to Home, recents, notifications, quick settings, lock screen, and screenshot (see [usage](usage.md#keyboard-shortcuts)).
 
 ### Screen does not wake
 
 Symptom: the screen is off or locked, host input (mouse movement) arrives, but the display does not wake.
 
-Diagnostic: with the app's Debug logging enabled, inbound input is logged per event to the debug sink (`barrier_debug.log` in the external files dir), e.g. `input event: MouseMove; wakeLock wasHeld=true; acquire=true; held=true; interactive=false; keyguardLocked=false; keyguardSecure=false`. The wake lock is re-armed (release + acquire, which re-applies `ACQUIRE_CAUSES_WAKEUP`) before the event is dispatched, so a healthy retest should show `acquire=true` and `held=true` on every event, alongside the device-interactive and keyguard state.
+Diagnostic: with the app's Debug logging enabled, each inbound input event is logged to the debug sink (`barrier_debug.log` in the external files dir), for example `input event: MouseMove; screenWake wasHeld=false; held=true; interactive=false; keyguardLocked=true; keyguardSecure=true`. The screen-wake lock is `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`, acquired with a 5 s timeout on every event. Builds before this change used `PARTIAL_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`. PowerManager does not allow that combination, so those builds held a lock that never woke the screen.
 
 Interpretation:
 
 - If no `input event:` lines appear at all, input delivery is the problem (the events never reach the accessibility service).
-- If the lines appear with `acquire=true; held=true` but the display still does not wake, the re-arm is not the blocker; the wake mechanism or the keyguard is. A logged `keyguardLocked=true` alongside an apparently armed wake lock points at the keyguard swallowing the wake, and the next retest should confirm whether the display turns on and the keyguard then re-engages.
-- The `interactive=` value is `PowerManager.isInteractive()`, which reports whether the device considers itself awake; it is logged per event so a retest can correlate the wake failure with the device state.
+- If the lines show `held=true` but `interactive=false` stays false and the display remains dark, this device or ROM does not honour the wake lock. Report the device model and Android version.
+- If `interactive=true` appears after an event but the display is still dark, check the physical display state and whether the phone's own power settings override the wake.
+- `keyguardLocked=true` means the screen can wake to the lock screen, but the user still has to unlock it. The wake lock does not dismiss the keyguard.
 
-Workaround: none yet. Retest with the latest debug APK (`adb install -r app/build/outputs/apk/debug/app-debug.apk` on the real device, Debug logging checked first).
+The debug log is written only while Debug logging is checked. Unchecking it deletes the existing `barrier_debug.log`, so no stale log is left behind.
+
+Workaround: none yet for a secure lock screen. Retest with the latest debug APK (`adb install -r app/build/outputs/apk/debug/app-debug.apk` on the real device, Debug logging checked first).
 
 ## Build issues
 
