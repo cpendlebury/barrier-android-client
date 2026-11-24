@@ -1,76 +1,86 @@
 # Using the app
 
-The screen is a small form. The app now connects to a real Barrier server: the handshake completes and the client reaches `CONNECTED`. Pointer movement, clipboard sync, and text injection are partially functional (press/move/release drags via continuing gestures; keystrokes via the Barrier IME when enabled). Typing individual keystrokes is now possible through the Barrier IME when enabled and selected; otherwise keystrokes fall back to the accessibility service's limited global-action path. See [Status and limitations](limitations.md) for details.
+This page covers setting the phone up, connecting to a Barrier server, and what each input does on the phone. For the limits of each feature see [Status and limitations](limitations.md).
 
-## Screen
+## First-time setup
 
-| Control | Id | Behaviour |
-|---------|----|-----------|
-| Barrier Server Host | `serverHostEditText` | Free text. Hint `e.g. 192.168.1.50`. Not validated |
-| Barrier Server Port | `serverPortEditText` | Number. If empty or not an integer, the code uses `24800` |
-| Client Name | `clientNameEditText` | If empty after trim, the code uses `AndroidBarrierClient` |
-| Connect | `connectButton` | Starts the foreground service, constructs a `BarrierClient`, attempts connection |
-| Disconnect | `disconnectButton` | `stopService` on `BarrierForegroundService` |
-| Accessibility service status | `accessibilityStatusTextView` | `enabled` or `disabled`, from secure settings |
-| Open Accessibility Settings | `openAccessibilitySettingsButton` | Hidden only when `isEnabled()` is true. Opens the system accessibility screen |
-| Error line | `errorTextView` | Red text for connection errors, injection failures, disabled-service warnings |
-| Status line | `statusTextView` | `Barrier state: …` or `Barrier error: …` |
-| Server fingerprint | `serverFingerprintTextView` | SSL fingerprint of the server observed at handshake, rendered in Barrier's display form (uppercase, colon-separated pairs); `unavailable` before a TLS handshake completes, cleared on disconnect |
+1. Install the APK (see [installation](installation.md)).
+2. Open **Settings → Accessibility → BarrierAndroid** and turn the service on. On Android 13+ you must first allow restricted settings (see [troubleshooting](troubleshooting.md#app-was-denied-access-android-13)). The main screen shows `Accessibility service: enabled` once it is on.
+3. Enable the Barrier keyboard in **Settings → Keyboard** (or **Language & input**). It is the input method that delivers keystrokes. The main screen shows the keyboard status. The app switches to the Barrier keyboard on connect and restores your previous keyboard on disconnect.
+4. On the Barrier server, add a screen named `AndroidBarrierClient` (or the name you set in the app) and place it next to the computer's screen in the layout.
 
-The status line starts at `DISCONNECTED`. On a successful connection it transitions to `CONNECTED`. On failure it shows an error message.
+## Connecting
 
-## Connect
+1. Enter the server's host name or IP and the port (24800 by default).
+2. Optionally change the client name. It must match the screen name on the server exactly.
+3. Tap **Connect**. The status line goes from `DISCONNECTED` to `CONNECTED` after the handshake. The first connection to a server shows its certificate fingerprint on the main screen; the app accepts and remembers that fingerprint.
+4. Tap **Disconnect** to stop the service. Leaving the app does not stop it, so the connection survives switching to other apps. A notification shows while connected.
 
-1. If the accessibility service is not enabled, a toast and error line warn the user, but the tap continues.
-2. A `PendingConnection` is stored on the service companion, including the activity listener, clipboard handlers, and a screensaver callback.
-3. `startService` is called inside `runCatching`.
+If the server goes away, the app reconnects with a backoff of 1 s up to 30 s. It keeps trying until you tap **Disconnect**.
 
-`onStartCommand` reads the companion property, assigns the activity listener, copies clipboard handlers, sets screen dimensions from display metrics, and calls `startConnection`, which builds a `SocketBarrierTransport` and a `BarrierClient` on the service scope. The client's `connect()` is launched on the service scope.
+## Moving the pointer and clicking
 
-The client waits for the server's `Hello`, responds with `HelloBack`, then handles `QINF` → `DINF` → `CIAK` → `DSOP` → `CONNECTED`.
+The host's pointer can move onto the phone. A white arrow cursor follows the host pointer over other apps. Movement does not send a gesture, so it does not scroll or type anything by itself.
 
-## Disconnect
+- **Left click**: a tap at the cursor position. Press and release are a click, and holding the button drags.
+- **Middle click**: a tap at the cursor position.
+- **Right click** and the mouse's **back** side button: navigate back (Android Back).
+- **Forward** side button: nothing. Android has no public forward action.
 
-**Disconnect** stops the service. Leaving the activity no longer stops the service, so the connection survives backgrounding. The notification persists while connected. There is no separate "keep running in the background" control — the foreground service is always active while connected.
+The cursor hides when the button is released, when the client disconnects, and when the screensaver starts. Injected input shows it again.
 
-## Accessibility button
+Known issue: in the stock Android Files app, a tapped folder does not open. Use another file manager such as Fossify File Manager (see [troubleshooting](troubleshooting.md#stock-files-app-does-not-open-folders)).
 
-**Open Accessibility Settings** starts `Settings.ACTION_ACCESSIBILITY_SETTINGS`. The service is registered with meta-data, so it appears in the list on Android. On Android 13+, sideloaded apps need "Allow restricted settings" before the service can be enabled.
+## Scrolling
 
-The status text is refreshed in `onCreate` and `onResume`.
+Mouse wheel events scroll at the cursor position:
 
-## Clipboard and typing
+- Wheel forward scrolls the page up.
+- Wheel back scrolls the page down.
+- Horizontal wheel events (`xDelta`) scroll sideways. These are not validated on device.
 
-**Clipboard-based typing path**: When the server pushes clipboard data (DCLP), the app stores it into the device clipboard via `ClipboardManager` rather than injecting it into the focused editable field, so the content is available for an explicit user-initiated paste. To type from the server, copy text on the server — it will be pushed to the phone and stored.
+Each wheel notch is a fixed 200 px swipe. Some apps ignore injected swipes and will not scroll.
 
-**Host-driven paste**: when the host sends Ctrl+V, the client routes the key event (keyId `0x76`, CONTROL modifier bit `0x0002`) to the IME paste action, which commits the stored clipboard content into the focused editable field via `InputConnection.commitText`. This is the explicit paste path: copy on the host → stored on the phone; press Ctrl+V on the host → delivered into a focused field.
+## Typing
 
-**Host copy and cut**: host Ctrl+C (keyId `0x43`) copies the focused editable field's text into the Android clipboard via the accessibility service; host Ctrl+X (keyId `0x58`) cuts (copies then clears the field). A subsequent host Ctrl+V (paste) delivers the stored content into the focused field.
+With the Barrier keyboard enabled and selected, keys typed on the host go into the focused text field on the phone: letters, numbers, punctuation, Enter, Backspace, Delete, Tab, and the arrow keys.
 
-**Keystroke typing**: individual keystrokes are now possible when the Barrier keyboard (IME) is enabled in system settings and selected as the active input method. In that mode, Barrier key events are committed into the focused field via `InputConnection` (printable characters via `commitText`, special keys via `sendKeyEvent`), with modifier state from the Barrier modifier mask. If the IME is not active, key events fall back to the accessibility service's limited global-action path (Back/Home/Recents only). Keystroke-by-keystroke injection into arbitrary fields without the IME is not possible (no public key injection API).
+Without the Barrier keyboard active, ordinary keystrokes are dropped. Escape still goes Back, and the shortcuts below still work.
 
-## Mouse movement
+## Host shortcuts
 
-Known issue: in the stock Android Files app, tapping a folder does not open it. Use another file manager such as Fossify File Manager (see [troubleshooting](troubleshooting.md#stock-files-app-does-not-open-folders)).
+These host chords run phone actions and do not need a focused field:
 
-Mouse movement does not send any gesture to the phone. The injected position is mirrored onto a visible cursor overlay (a classic pointer drawn in a translucent window hosted in the accessibility service). The cursor follows movement, hides when a button is released, on disconnect, or on screensaver start, and injected input re-shows it. Clicks and scrolls land at the tracked position. Movement strokes were removed because they caused phantom keystrokes on on-screen keyboards and accidental scrolls.
+| Host chord | Phone action |
+|------------|--------------|
+| Escape | Back |
+| Meta+H or Meta+Enter | Home |
+| Alt+Tab or Meta+Tab | Recent apps |
+| Meta+N | Notification shade |
+| Meta+S | Quick settings |
+| Meta+L | Lock screen (Android 9+) |
+| Meta+Ctrl+S or Print Screen | Screenshot (Android 9+) |
 
-## Mouse buttons
+Ctrl, Alt, and Meta combined with a letter or digit (for example Ctrl+L or Alt+Left) are sent as key events to the focused field, so an app's own shortcut can handle them. This needs a focused text field, and not every app honours synthetic key events.
 
-Host mouse buttons arrive as `MouseButtonDown` / `MouseButtonUp` events carrying the `button` field, numbered as Barrier numbers them: 1 left, 2 middle, 3 right, 4 and 5 the extra back and forward buttons. Right click (3) and the back button (4) fire the BACK global action (`injectBack`), so the host's Back navigates back; the release is a no-op and does not fire a click. The forward button (5) is routed to `injectForward`, which declines because no public forward navigation action exists. Left and middle buttons keep the tap behaviour (press/release = click at the tracked position).
+Meta alone (app drawer), Meta+A (assistant), and Meta+/ (keyboard shortcuts) are not mapped.
 
-## Mouse wheel scrolling
+## Clipboard
 
-Host wheel events (`DMWM`) arrive as `BarrierInputEvent.MouseWheel` with signed `xDelta` / `yDelta`. Barrier sends +120 for wheel forward (away from the user, page scrolls up) and -120 for wheel back. The client maps a positive `yDelta` to a finger-down swipe, so the page scrolls up, and a negative `yDelta` to a finger-up swipe, so the page scrolls down. Horizontal scroll follows the sign of `xDelta`. Each event is a 200 px swipe over 100 ms at the tracked pointer position, clamped to stay on screen.
+The clipboard is shared in both directions, with two steps.
 
-The scroll is a synthetic swipe because `GestureDescription` cannot carry axis or delta data, so the signed delta becomes the scroll direction and the per-event distance stays a flat 200 px. Scrolling through browsers, social apps, email, and chat is implemented on this path but not yet validated on device.
+- **From the server to the phone**: copy text on the server. It is pushed to the phone and stored in the device clipboard. Nothing is typed into a field.
+- **Pasting on the phone**: press Ctrl+V on the host with a text field focused on the phone. The stored clipboard is committed into the field.
+- **From the phone to the server**: press Ctrl+C or Ctrl+X on the host with an editable field focused on the phone. Ctrl+C copies the field's text into the device clipboard. Ctrl+X copies it and clears the field. The text is sent to the server when the server asks the phone for its clipboard, which is how Barrier fetches it.
 
-## Keyboard shortcuts
+Host Ctrl+C, Ctrl+X, and Ctrl+V use key ids `0x63` (C), `0x78` (X), and `0x76` (V) with the Control modifier. Copy and cut work only when an editable field has focus on the phone.
 
-Host chords that map to phone system actions run without the Barrier keyboard being active: Meta+H or Meta+Enter (Home), Alt+Tab or Meta+Tab (recent apps), Meta+N (notification shade), Meta+S (quick settings), Meta+L (lock screen, Android 9+), and Meta+Ctrl+S or Print Screen (screenshot, Android 9+). Escape is Back as before.
+Clipboard sharing can be turned off by the server (`CLPS` option). In that case no clipboard data is sent or stored.
 
-Ctrl, Alt, and Meta combined with a letter or digit (for example Ctrl+L) are delivered to the focused text field as key events, so an app's own shortcut can handle them. This needs a focused text field. The Meta key alone (app drawer), Meta+A (assistant), and Meta+/ (keyboard shortcuts) are not mapped; Android has no public action for them.
+## Screen wake
 
-## What a real session still needs
+When the screen is off or locked, host input wakes the display. The wake lasts 5 seconds after each input event. A locked phone still needs to be unlocked, and on some devices the wake may not happen (see [troubleshooting](troubleshooting.md#screen-does-not-wake)).
 
-Even with the connection working, a fully usable session still needs: proper injection (real pointer events, not gestures), and on-device validation. See [limitations](limitations.md) and [configuration](configuration.md).
+## Debug logging
+
+The **Debug logging** checkbox writes the app's diagnostic log to `barrier_debug.log` in the app's external files directory. It is off by default. Turn it on to report a problem, and turn it off again afterwards. Unchecking it deletes the existing log.

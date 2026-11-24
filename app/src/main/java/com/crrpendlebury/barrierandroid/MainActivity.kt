@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onInputEvent(event: BarrierInputEvent) {
-            // Phase 2: inject input via the accessibility service.
+            // Inject input through the accessibility service and the Barrier keyboard.
             val service = BarrierAccessibilityService.instance ?: return
             when (event) {
                 is BarrierInputEvent.MouseMove -> {
@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is BarrierInputEvent.ScreenEntered, is BarrierInputEvent.ScreenLeft -> {
-                    // Screen tracking is handled separately (Phase 3 hardening).
+                    // Screen enter and leave are not acted on; the phone does not switch screens.
                 }
 
                 is BarrierInputEvent.KeyDown -> handleBarrierKey(event.keyId, event.modifierMask, KeyEvent.ACTION_DOWN)

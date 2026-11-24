@@ -48,6 +48,28 @@ When enabling the accessibility service on a sideloaded app, Android shows a war
 3. Confirm the dialog
 4. Go back to Settings → Accessibility → BarrierAndroid → toggle On
 
+## Keys do nothing on the phone
+
+- Ordinary keystrokes need the Barrier keyboard. Enable it in **Settings → Keyboard**, then check the `Keyboard (IME)` line on the main screen. It reads `enabled` once the keyboard is on. The app switches to it when the connection starts; if the keyboard picker shows another keyboard, select Barrier from it.
+- Keystrokes only reach a focused text field. Tap into a field first.
+- Escape goes Back, and the host shortcuts (Home, recent apps, shade, and so on) do not need a field. If those work but typing does not, the keyboard is the cause.
+
+## Ctrl+L, Alt+Left, or another app shortcut does nothing
+
+App shortcuts are delivered as key events to the focused text field, so they need a field with focus. Not every app honours synthetic key events with Ctrl or Alt held. Those limits are in [limitations](limitations.md#keyboard).
+
+## Scrolling does nothing in one app
+
+Scroll is an injected swipe. Apps that ignore injected gestures will not scroll. Try the same wheel in another app to confirm the connection is fine.
+
+## Meta+N, Meta+A, Meta+/, or the app drawer does nothing
+
+Meta+N, Meta+S, Meta+L, Meta+H, Meta+Tab, Alt+Tab, and Print Screen are mapped. Meta alone (app drawer), Meta+A (assistant), and Meta+/ are not, because Android has no public action for them. If a mapped chord does nothing, turn on Debug logging, press the chord, and look for `handleBarrierKey keyId=… mask=…` followed by `host shortcut … accepted=…`. No `handleBarrierKey` line means the host or server did not send the key; `accepted=false` means Android refused the action.
+
+## Right click clicks instead of going back
+
+Right click is Barrier button 3 and maps to Back. A build older than 0.1.2 mapped Back to button 2, which is the middle button. Update to 0.1.2 or later.
+
 ## Clipboard receipt and text injection
 
 When the server pushes clipboard data (DCLP), the app stores it into the device clipboard via `ClipboardManager` and does not inject it into the focused editable field, so receipt does not depend on a focused field and cannot fail there.
@@ -77,7 +99,7 @@ Workaround: use another file manager, such as Fossify File Manager.
 
 Symptom: the screen is off or locked, host input (mouse movement) arrives, but the display does not wake.
 
-Diagnostic: with the app's Debug logging enabled, each inbound input event is logged to the debug sink (`barrier_debug.log` in the external files dir), for example `input event: MouseMove; screenWake wasHeld=false; held=true; interactive=false; keyguardLocked=true; keyguardSecure=true`. The screen-wake lock is `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`, acquired with a 5 s timeout on every event. Builds before this change used `PARTIAL_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`. PowerManager does not allow that combination, so those builds held a lock that never woke the screen.
+Diagnostic: with the app's Debug logging enabled, each inbound input event is logged to the debug sink (`barrier_debug.log` in the external files dir), for example `input event: MouseMove; screenWake wasHeld=false; held=true; interactive=false; keyguardLocked=true; keyguardSecure=true`. The screen-wake lock is `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`, acquired with a 5 s timeout on every event. Builds before 0.1.2 used `PARTIAL_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP`. PowerManager does not allow that combination, so those builds held a lock that never woke the screen.
 
 Interpretation:
 
@@ -88,7 +110,7 @@ Interpretation:
 
 The debug log is written only while Debug logging is checked. Unchecking it deletes the existing `barrier_debug.log`, so no stale log is left behind.
 
-Workaround: none yet for a secure lock screen. Retest with the latest debug APK (`adb install -r app/build/outputs/apk/debug/app-debug.apk` on the real device, Debug logging checked first).
+Workaround: on a secure lock screen the display wakes but the phone still needs unlocking. Check the debug log as described above, and report the device model and Android version if the display stays dark while `interactive` remains false.
 
 ## Build issues
 
@@ -110,4 +132,4 @@ The app does not depend on `appcompat`. If you add it, ensure it's cached or bui
 
 ## Tests pass but the phone does nothing
 
-The 27 unit tests drive `BarrierClient` through `FakeBarrierTransport`. They never start `BarrierForegroundService`, never open a socket, and never enable an accessibility service. A passing test suite does not mean the app works on a device.
+The 48 unit tests drive `BarrierClient` through `FakeBarrierTransport`, and the packet and shortcut tests run pure Kotlin. None of them start `BarrierForegroundService`, open a socket, or enable an accessibility service. A passing test suite does not show that the app works on a device; the device checks in [limitations](limitations.md) do.

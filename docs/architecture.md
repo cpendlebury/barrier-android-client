@@ -1,101 +1,135 @@
 # Architecture
 
-Package `com.crrpendlebury.barrierandroid`. UI and service code sit in that package. Protocol types sit in `protocol`. Injection helpers sit in `accessibility`.
+The computer runs the Barrier server and owns the keyboard and mouse. The phone runs this client. Everything below describes the phone side: input arrives from the server and the app makes the phone act on it.
 
-The protocol layer can run without Android, apart from `SocketBarrierTransport`. The unit tests use `FakeBarrierTransport` and never touch the service or the activity.
+Package `com.crrpendlebury.barrierandroid`. Protocol code is in `protocol`, the accessibility service and its drag helper in `accessibility`, and the input method and key mapping in `ime`.
 
 ## Layout
 
 ```text
 app/src/main/java/com/crrpendlebury/barrierandroid/
-├── MainActivity.kt                  # XML form, clipboard helpers, listener
-├── BarrierForegroundService.kt      # Hosts BarrierClient, foreground notification, wake lock
+├── MainActivity.kt                    # Connection form, input routing, clipboard handlers
+├── BarrierApplication.kt              # Process start and uncaught-exception logging
+├── BarrierForegroundService.kt        # Owns BarrierClient, notification, wake locks, Wi-Fi lock, network callback
 ├── accessibility/
-│   └── BarrierAccessibilityService.kt
+│   ├── BarrierAccessibilityService.kt # Gestures, global actions, cursor overlay, debug log sink
+│   └── DragCoalescer.kt               # Chains drag segments into one continuing stroke
+├── ime/
+│   ├── BarrierIME.kt                  # Input method: commitText, sendKey, paste
+│   ├── BarrierKeyMap.kt               # Barrier key ids to Android key codes and characters
+│   ├── HostShortcuts.kt               # Host chord to phone system action
+│   └── ImeSwitcher.kt                 # Makes BarrierIME the active input method and restores the previous one
 └── protocol/
-    ├── BarrierClient.kt             # Handshake, keepalive, reconnect, clipboard, options
-    ├── BarrierPacket.kt             # Encode/decode of payload bodies
-    ├── PacketCodec.kt               # 4-byte big-endian length prefix
+    ├── BarrierClient.kt               # Handshake, keepalive, reconnect, clipboard, options
+    ├── BarrierPacket.kt               # Encode and decode of payload bodies
+    ├── PacketCodec.kt                 # 4-byte big-endian length prefix
     ├── BarrierTransport.kt
-    ├── SocketBarrierTransport.kt    # Plain + TLS socket; TLS pins server by SHA-256 fingerprint (Barrier fingerprint TLS)
-    ├── BarrierModels.kt             # State, errors, input events, listener
+    ├── SocketBarrierTransport.kt      # Plain socket, or TLS pinned by server certificate fingerprint
+    ├── BarrierServerTrustManager.kt   # Fingerprint pinning, trust on first use
+    ├── BarrierModels.kt               # State, errors, input events, listener
     ├── BarrierCommand.kt
     └── BarrierConstants.kt
 
-app/src/test/java/.../protocol/
-├── BarrierClientTest.kt
-├── PacketCodecTest.kt
-└── FakeBarrierTransport.kt
+app/src/main/res/                      # activity_main.xml (XML views), accessibility and IME configs, strings
+app/src/test/java/.../                 # PacketCodecTest, BarrierClientTest, BarrierServerTrustManagerTest,
+                                       # HostShortcutsTest, BarrierKeyMapTest, FakeBarrierTransport
 ```
 
-The activity layout is `res/layout/activity_main.xml`. It is not Compose, even though the Compose plugin and libraries are applied. Retrofit and Gson are dependencies and are unused.
+The UI is XML views in `res/layout/activity_main.xml`. Compose is on the classpath but unused. Retrofit and Gson have been removed.
 
-## What a tap on Connect does
+## Connect
 
 ```text
 MainActivity.connectToBarrierServer()
-  writes BarrierForegroundService.Companion.pendingConnection
+  stores settings in SharedPreferences
+  writes BarrierForegroundService.pendingConnection
   startService(BarrierForegroundService)
 
 BarrierForegroundService.onStartCommand()
-  reads Companion.pendingConnection      # now wired
-  assigns connectionListener from pending.listener
-  startConnection(pending)              # builds client + transport
-  startForeground(...)                  # notification
+  takes pendingConnection, assigns the activity listener
+  acquires the CPU wake lock and the Wi-Fi lock
+  registers the network callback
+  startConnection(): builds SocketBarrierTransport and BarrierClient on serviceScope
+  startForeground(...) with the notification
 ```
 
-`startConnection()` now builds a `SocketBarrierTransport` and a `BarrierClient` on `SupervisorJob() + Dispatchers.IO`. It copies the clipboard lambdas and `onScreenSaverChanged` from the pending connection, and sets `screenWidth`/`screenHeight` from display metrics. The client's `connect()` is launched on the service scope.
+`BarrierClient.connect()` runs on the service scope. The server sends `Hello`, the client answers `HelloBack`, then the server sends `QINF`, the client replies `DINF`, the server sends `CIAK` and `DSOP`, and the state becomes `CONNECTED`. The activity then calls `ImeSwitcher.useOurs` so the Barrier keyboard becomes active.
 
-`clientListener` forwards state, input, and errors to `connectionListener` (now assigned). Input events reach the activity listener, which routes them to `BarrierAccessibilityService`. Clipboard data reaches `handleClipboardData`.
-
-The break is no longer at the service wiring step. Service wiring is in place. The remaining breaks are the injection path (see below) and real-device validation.
-
-## Intended path, not the one that runs
+## Input path
 
 ```text
-Barrier server
-  TCP :24800
-    SocketBarrierTransport.readPackets
-      PacketCodec.decodePayload → BarrierPacket.decode
-        BarrierClient.handlePacket
-          BarrierClientListener in the activity
-            BarrierAccessibilityService.injectPointer / injectKey
-            clipboard lambdas in MainActivity
+Barrier server (TCP, port 24800 by default)
+  SocketBarrierTransport.readPackets
+    PacketCodec.decodePayload -> BarrierPacket.decode
+      BarrierClient.handlePacket            # sends CNOP after input packets
+        BarrierForegroundService.clientListener.onInputEvent
+          wake lock: timed screen-bright lock, logged per event
+          MainActivity.onInputEvent
+            pointer  -> BarrierAccessibilityService.injectPointer
+            buttons  -> injectBack / injectForward / tap path
+            wheel    -> injectPointer(ACTION_SCROLL, xDelta, yDelta)
+            keys     -> HostShortcuts.match
+                        -> global action (Home, recents, shade, ...)
+                        -> BarrierIME commitText / sendKey, when a field has focus
+                        -> copy / cut / paste chords
 ```
 
-Breaks on that path, in order:
+Pointer injection has three parts:
 
-1. ~~Socket transport~~ — now opens a plain `java.net.Socket` for plaintext and an `SSLSocket` whose server is pinned by SHA-256 fingerprint (Barrier's `ENCRYPTED_AUTHENTICATED`) for TLS. `connect()` no longer double-connects. Socket errors now surface via `onConnectionLost` → `closeTransport` and `BarrierError.ConnectionFailed`.
-2. The accessibility service is now declared with meta-data. `injectPointer` now consults the motion action (tap, stroke, scroll) but `dispatchGesture` creates discrete gestures, not continuous pointer tracking. `injectKey` still does not match real server key ids. `injectText` replaces field contents. See [limitations](limitations.md).
-3. Reconnect wiring: the service's client listener forwards `DISCONNECTED` without stopping the service, so the client's reconnect loop now survives a server drop. The service is stopped by the activity's Disconnect button.
+- `injectPointer` mirrors the position onto a cursor overlay window (`showCursor` / `hideCursor`, a translucent `TYPE_ACCESSIBILITY_OVERLAY` window that draws an arrow). The overlay is a display only; it never produces gestures.
+- `ACTION_DOWN`, `ACTION_MOVE`, and `ACTION_UP` drive a drag. `DragCoalescer` keeps one segment in flight, and each segment is dispatched with `dispatchGesture` and chained with `StrokeDescription.continueStroke`. Movement with no button held sends no gesture.
+- `ACTION_SCROLL` builds one swipe per wheel event. The swipe direction comes from the sign of the wheel delta and the start is clamped to the screen (`scrollGesture`).
+
+Global actions (`performGlobalAction`) back Home, Back, recents, the notification shade, quick settings, lock screen, and screenshot. They are used for the host shortcuts and the mouse back and right buttons. Keystrokes are not sent through the accessibility service, because the compile SDK exposes no key dispatch; they go through the IME instead.
+
+## Key delivery
+
+`BarrierIME` is an `InputMethodService`. When a text field has focus its `InputConnection` is available:
+
+- Printable characters go through `commitText`.
+- Special keys (Enter, Backspace, arrows, function keys, and so on) go through `sendKeyEvent` with the Barrier modifier state as the meta state.
+- Ctrl, Alt, and Meta chords with a printable key are sent as key events so that apps see the modifiers.
+
+Without an input connection, ordinary keys are dropped. `ImeSwitcher` switches the active input method when the connection starts and restores the user's previous method on disconnect.
+
+## Clipboard
+
+- `CCLP` (server asks for the phone's clipboard) calls `readClipboardBytes` in `MainActivity` and replies `DCLP`.
+- `DCLP` (server pushes clipboard) stores the text in the device clipboard with `ClipboardManager`. Nothing is typed into a field.
+- Host Ctrl+C and Ctrl+X read or clear the focused field through `copyFocusedEditableText` and `cutFocusedEditableText`. Host Ctrl+V calls `BarrierIME.paste`, which commits the device clipboard into the focused field.
 
 ## Client state machine
 
-`BarrierClient` is the piece the tests cover.
+`BarrierClient` is the protocol core, and the unit tests cover it.
 
-- `connect` records host, port, and TLS flag, then `performConnect`: set transport callback, state `CONNECTING`, `transport.connect`, state `HANDSHAKE`. It does not send `Hello`; the server sends `Hello` first and the client answers with `HelloBack`. It does not notify the listener for those two states.
-- A compatible server `Hello` (major 1, minor ≥ 6) is answered with `HelloBack`. Otherwise `IncompatibleVersion` and close.
-- `QINF` is answered with `DINF` using `screenWidth` / `screenHeight` (0 unless the caller sets them).
-- `CIAK` is ignored. `DSOP` applies options, sets `CONNECTED`, notifies, and starts keepalive plus a watchdog.
-- Input packets notify the listener and send `CNOP`.
-- `CALV` is answered with `CALV`.
-- `CCLP` calls `onClipboardGrab` and sends `DCLP`. `DCLP` reaches the clipboard handler, which stores the payload into the device clipboard (no field injection).
-- `CSEC` stores `screenSaverActive` and calls `onScreenSaverChanged`.
-- `CBYE`, version errors, and `EBSY` / `EUNK` / `EBAD` call `closeTransport`. If the previous state was `CONNECTED`, that schedules reconnect unless `disconnect()` set `userInitiatedClose`.
-- `DFTR` and `DDRG` are ignored. `CINN` / `COUT` update screen sequence and notify `ScreenEntered` / `ScreenLeft`, then send `CNOP`. The activity ignores those two events.
+- `connect` records host, port, and the TLS flag, then runs `performConnect`: set the transport callback, state `CONNECTING`, `transport.connect`, state `HANDSHAKE`. It does not send `Hello`; the server speaks first.
+- A compatible server `Hello` (major 1, minor at least 6) is answered with `HelloBack`. Otherwise the client reports `IncompatibleVersion` and closes.
+- `QINF` is answered with `DINF` using `screenWidth` and `screenHeight`, which the service sets from display metrics.
+- `CIAK` is ignored. `DSOP` applies options, sets `CONNECTED`, and starts keepalive and the watchdog.
+- Input packets notify the listener and reply `CNOP`. `CALV` is answered with `CALV`.
+- `CCLP` calls `onClipboardGrab` and replies `DCLP`. `DCLP` calls `onClipboardData`.
+- `CSEC` sets `screenSaverActive` and calls `onScreenSaverChanged`.
+- `CBYE`, the version errors, and `EBSY`, `EUNK`, and `EBAD` close the transport. If the previous state was `CONNECTED`, a reconnect is scheduled with exponential backoff (1 s doubling to 30 s), unless `disconnect()` set `userInitiatedClose`.
+- `DFTR` and `DDRG` are decoded and ignored.
 
-Keepalive and reconnect jobs use the `CoroutineScope` passed into the client. In the service that would be `serviceScope`. `onDestroy` cancels that scope and stops the client; it does not stop the service itself, so a running service survives activity recreation. The service no longer calls `stopSelf()` on `DISCONNECTED`; reconnect survives a server drop. The service is stopped by the activity's Disconnect button. The activity re-attaches its listener to a running service via `BarrierForegroundService.instance`.
+## Service lifetime
 
-## Accessibility service
+The service does not stop itself on `DISCONNECTED`, so the reconnect loop survives a server drop. The service stops only when the user taps **Disconnect** (which calls `stopService`) or the process is killed. Leaving the activity does not stop it, so the connection survives backgrounding. The activity re-attaches its listener to a running service on recreation through `BarrierForegroundService.instance`.
 
-`BarrierAccessibilityService` is a `AccessibilityService` with empty `onAccessibilityEvent` / `onInterrupt`. `onServiceConnected` publishes `instance`. The manifest now declares the `android.accessibilityservice` meta-data pointing at `res/xml/accessibility_service_config.xml`, so Android should list it in Settings. The system starts it only after the user enables it; the app does not start it itself.
+On `DISCONNECTED` the service also hides the cursor overlay.
 
-`injectGlobalAction` is a one-line wrapper around `performGlobalAction` and has no caller. `injectPointer` and `injectKey` are called from `MainActivity` only when a client listener fires; `injectText` is retained but is not called from the clipboard handler (received clipboard data is stored, not injected). With the service wiring fixed, those calls now happen on real input, but the implementations do not match the events. See [limitations](limitations.md).
+## Wake and power
 
-Pointer injection renders a visible cursor. `showCursor` / `hideCursor` add or remove a translucent overlay window (`WindowManager.addView` / `removeView`) whose inner `CursorOverlayView` draws a standard arrow. `injectPointer` mirrors injected position onto that overlay and drives show / move / hide; button-down, movement, and scroll show the cursor, button-up hides it. The overlay uses window type `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_SYSTEM_OVERLAY` below API 23), `FLAG_NOT_TOUCHABLE` / `FLAG_NOT_FOCUSABLE` / `FLAG_LAYOUT_NO_LIMITS` / `FLAG_LAYOUT_IN_SCREEN`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 23+, and a translucent format with a display-plus-margin window size. The overlay is a render surface only; `dispatchGesture` remains the sole gesture-producing path. The cursor hides on disconnect / screensaver via the client state listener and screensaver callback. The arrow is a classic pointer shape with a white fill and a black outline, so it stays visible on both light and dark content.
+- The partial wake lock keeps the CPU awake while the session runs. It does not wake the screen, so it carries no wake flag.
+- Each inbound input event acquires a separate `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP` lock with a 5 s timeout. The per-event log line records whether the lock was held and the device state (`interactive`, keyguard).
+- A Wi-Fi lock keeps the radio awake, and a `ConnectivityManager` callback closes the transport on network loss so the reconnect loop can retry on the new network.
+
+## Debug logging
+
+`BarrierAccessibilityService.log` is the single debug sink. It appends to `barrier_debug.log` in the app's external files directory, and returns without writing unless the **Debug logging** checkbox (`debug_logging_enabled`) is on. Unchecking the box deletes the file. `BarrierApplication` routes uncaught exceptions through the same sink.
 
 ## Tests
 
-`FakeBarrierTransport` records `send` and lets a test `emit` a packet into `onPacket`. Client tests launch `connect` on `backgroundScope`, then `runCurrent()` and `advanceUntilIdle()`. The reconnect test also `advanceTimeBy(INITIAL_RECONNECT_BACKOFF_MILLIS)` because `advanceUntilIdle()` does not fire that delay on its own.
+`FakeBarrierTransport` records `send` and lets a test `emit` a packet into `onPacket`. Client tests launch `connect` on `backgroundScope`, then use `runCurrent()` and `advanceUntilIdle()`. The reconnect test also calls `advanceTimeBy(INITIAL_RECONNECT_BACKOFF_MILLIS)`, because `advanceUntilIdle()` does not run that delay on its own.
 
-These tests do not construct `MainActivity`, `BarrierForegroundService`, or `SocketBarrierTransport`.
+`HostShortcuts` and `BarrierKeyMap` are pure Kotlin and tested on the JVM. Nothing in the test suite constructs `MainActivity`, `BarrierForegroundService`, or the accessibility service. Device behaviour is checked by hand.

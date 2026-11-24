@@ -1,6 +1,6 @@
 # Protocol notes
 
-This describes the framing **this client implements** in `BarrierPacket` and `PacketCodec`. It is not a copy of the Barrier specification, and it has not been checked against a live Barrier 2.4.0 server. Where the code and a typical Barrier description disagree, the code is what is documented here.
+This describes the framing **this client implements** in `BarrierPacket` and `PacketCodec`. It is not a copy of the Barrier specification. The handshake and input packets have been exercised against a live Barrier 2.4.0 server on a phone. Where the code and a typical Barrier description disagree, the code is what is documented here.
 
 Wire constants live in `BarrierCommand` and `BarrierConstants`. Protocol version advertised by the client is 1.6 (`PROTOCOL_MAJOR_VERSION` / `PROTOCOL_MINOR_VERSION`).
 
@@ -8,7 +8,7 @@ Wire constants live in `BarrierCommand` and `BarrierConstants`. Protocol version
 
 `PacketCodec` prefixes every payload with a 4-byte big-endian length. The reader drops the connection if the length is greater than 4 MiB, if the stream ends early, or if `BarrierPacket.decode` returns null.
 
-Integers in payloads are big-endian. The helpers treat them as unsigned bit patterns (`readInt16` / `readInt32`). Strings, where present, are a big-endian 32-bit byte length plus bytes. HelloBack uses US-ASCII for the name on decode and UTF-8 on encode.
+Integers in payloads are big-endian. Most helpers read them as unsigned bit patterns (`readInt16` / `readInt32`). The wheel and relative-move deltas (`DMWM` and `DMRM`) are Barrier `%2i` fields, two's complement, and decode with `readSInt16`. Reading them unsigned made every wheel-back event look like a forward event before 0.1.2. Strings, where present, are a big-endian 32-bit byte length plus bytes. HelloBack uses US-ASCII for the name on decode and UTF-8 on encode.
 
 ## Greeting
 

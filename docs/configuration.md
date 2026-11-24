@@ -8,17 +8,17 @@ There is no settings screen beyond the three fields on the main activity. The th
 |-------|------------------|--------|
 | Host | none | Sent only if a client is actually constructed. Empty host is not rejected |
 | Port | `24800` (`DEFAULT_BARRIER_PORT`) | Barrier's usual port. Non-numeric text falls back to 24800; `0` is kept |
-| Client name | `AndroidBarrierClient` (`DEFAULT_CLIENT_NAME`) | Would be the HelloBack name and must match a screen name on the server, case-sensitive, if a handshake ever ran |
+| Client name | `AndroidBarrierClient` (`DEFAULT_CLIENT_NAME`) | Sent to the server in `HelloBack`. Must match a screen name on the server, case-sensitive |
 
 There is no TLS switch. The service hardcodes `useTls = true` in both the transport constructor and `connect()`. The transport does honour that flag when passed to `connect` — a plain `java.net.Socket` for `useTls == false`, an `SSLSocket` whose server is authenticated by SHA-256 fingerprint (Barrier: `ENCRYPTED_AUTHENTICATED`) for `useTls == true`. The fingerprint is accepted on first use and then pinned; the UI always passes `true`, so plaintext is not reachable from the app. The observed server fingerprint is surfaced through the client listener and displayed on the main screen (`serverFingerprintTextView`) in Barrier's display form (uppercase, colon-separated pairs). See [limitations](limitations.md).
 
 ## Server side
 
-A future working build would be configured like any other Barrier client:
+A server is configured like any other Barrier client:
 
 - Server listens on the port entered in the app (24800 unless changed).
 - A screen exists whose name matches the client name exactly.
-- Encryption must match whatever the client actually speaks; the client speaks TLS (Barrier's self-signed certificate, authenticated by SHA-256 fingerprint pinning) and plaintext at the transport layer, though the UI only ever requests TLS.
+- The server uses TLS. The app always requests TLS, so a plaintext-only server will fail the handshake.
 
 Screen dimensions are now set from `resources.displayMetrics` in the foreground service before connect, so `DINF` advertises the real device resolution.
 
@@ -28,7 +28,7 @@ Option ids are the Barrier 4-character codes packed big-endian, from `src/lib/ba
 
 | Code | Constant | Stored as | Changes behaviour? |
 |------|----------|-----------|--------------------|
-| `CLPS` | `OPTION_CLIPBOARD_SHARING` (`0x434C5053`) | `clipboardSharingEnabled` (`value != 0`) | No. Grab and data handlers do not check it |
+| `CLPS` | `OPTION_CLIPBOARD_SHARING` (`0x434C5053`) | `clipboardSharingEnabled` (`value != 0`) | Yes. While off, a clipboard grab replies with empty data and received clipboard data is not stored |
 | `HART` | `OPTION_HEARTBEAT` (`0x48415254`) | `heartbeatSeconds` | Yes — `applyOptions` sets the keepalive interval from `HART` when the value is > 0; the keepalive timer uses the requested interval. |
 | `SSVR` | `OPTION_SCREEN_SAVER_SYNC` (`0x53535652`) | `screenSaverSyncEnabled` (`value != 0`) | No. `CSEC` only updates `screenSaverActive` |
 
@@ -48,4 +48,4 @@ These are compile-time constants, not preferences:
 | `MAX_RECONNECT_BACKOFF_MILLIS` | 30000 | Same. Backoff doubles until this cap |
 | `PROTOCOL_MAX_MESSAGE_LENGTH` | 4 MiB | Yes. Longer frames abort the read loop |
 
-The app's service stops itself on `DISCONNECTED`, so the backoff loop would not survive in the current service even if a socket existed.
+The service does not stop itself on `DISCONNECTED`, so the backoff loop keeps running while the service is alive. The service stops only on an explicit Disconnect or when the process is killed.

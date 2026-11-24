@@ -28,7 +28,8 @@ import java.io.FileOutputStream
 import kotlin.math.sign
 
 /**
- * Accessibility service that is supposed to apply Barrier input on the phone.
+ * Accessibility service that applies Barrier pointer, button, wheel, and
+ * shortcut input on the phone, and hosts the debug log sink.
  *
  * Direction of control: the computer's keyboard and mouse are the source.
  * This service is the sink. It does not capture the phone's own input to send
@@ -41,15 +42,16 @@ import kotlin.math.sign
  * it in Settings → Accessibility. [isEnabled] only reads
  * `ENABLED_ACCESSIBILITY_SERVICES`; it cannot enable the service.
  *
- * Even if the system did bind it, the inject methods are not a real input path.
- * Read each method's KDoc before calling it from new code. The public compileSdk
- * 35 surface has `dispatchGesture` and `performGlobalAction`, and no
- * `dispatchKeyEvent`.
+ * Injection uses only public API. Pointer and scroll work through
+ * `dispatchGesture`, and system actions through `performGlobalAction`. The
+ * compileSdk 35 surface has no `dispatchKeyEvent`, so keystrokes go through the
+ * Barrier input method instead (see `ime/BarrierIME`). Read each method's KDoc
+ * before calling it from new code.
  *
  * Pointer injection renders a visible cursor. [showCursor] and [hideCursor]
  * add or remove a translucent overlay window that draws a standard arrow; the
  * overlay mirrors injected position but is a rendering surface only. [injectPointer]
- * remains the sole place that turns Barrier pointer traffic into framework
+ * is the sole place that turns Barrier pointer traffic into framework
  * gestures, translating signed host wheel deltas for
  * [android.view.MotionEvent.ACTION_SCROLL] into a scroll gesture. The cursor is
  * hidden when the client disconnects or the screensaver starts, and subsequent

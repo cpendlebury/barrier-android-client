@@ -5,10 +5,21 @@
 - **Goal**: Android phone as a secondary screen for a computer running the Barrier server (primary); server → client input delivery; no video (permanently out of scope); clipboard in scope (not optional).
 - **Plan**: `/home/chris/.opencode/plan/barrier-android-client.md`
 
-## Current phase status
-- Phase 1 (client protocol core) — **COMPLETE AND GREEN**.
-- Phase 2 (Accessibility Service injection + clipboard + foreground service) — **SUBSTANTIALLY COMPLETE**. Connection handshake works on real device. Input injection partially functional (discrete gestures plus IME-delivered keystrokes; not a real system pointer).
-- Phase 3 (hardening) — **IN PROGRESS**: reconnect, screensaver/options, UI wiring, wake lock, battery optimization, background survival, settings persistence, network change detection all implemented; **visible pointer cursor overlay implemented** via accessibility-hosted translucent window drawing a standard arrow (Red Moon pattern); **instant-crash-on-connect fixed** (added missing `ACCESS_NETWORK_STATE` permission for the network callback); **in-app debug log sink added** (`barrier_debug.log` in external files dir; cursor lifecycle + inject logging; cursor overlay show lifecycle log entries added in `showCursor`). **Handoff refreshed 2026-11-20**: pointer injection now runs full press/move/release drags via a `DragCoalescer` chain of continuing gesture strokes; server keystrokes deliver through the new `BarrierIME` (`InputConnection.commitText` / `sendKey`, modifier state from the Barrier mask) with `ImeSwitcher` switching; TLS is now true Barrier TLS (SHA-256 leaf-cert fingerprint pinning, hostname verification off, trust-on-first-use persisted) via `BarrierServerTrustManager`; settings persist via `SharedPreferences` (`barrier_settings`, pin under `server_fingerprint`). Device retest (latest session): mouse movement and keyboard-over-IME now mostly usable on device; README and docs updated accordingly.
+## Current state (2026-11-25, release 0.1.2)
+- Release **0.1.2** is published on GitHub (tag `0.1.2`, `versionCode` 4, signed APK SHA-256 `89ee1157…`). Source HEAD is the 0.1.2 release commit `168efe6` plus the documentation review that followed.
+- The connection works end to end on a personal phone: Barrier 2.4.0 handshake over TLS with fingerprint pinning, the cursor overlay follows the host pointer, left click, right click and back go back, wheel scrolls both ways, host input wakes the screen, host shortcuts (Home, recents, shade, quick settings, lock, screenshot, Meta+N) work, keystrokes go through the Barrier keyboard into focused fields, and the clipboard works in both directions.
+- Current behaviour, known gaps, and device-confirmed items are in `docs/limitations.md`. Architecture is in `docs/architecture.md`. Treat those as the source of truth; the dated sections below are history.
+- Still open: forward button (no public API); horizontal scroll and Ctrl/Alt app shortcuts not validated on device; screen wake depends on device and uses a deprecated flag; Meta alone, Meta+A, and Meta+/ unmapped.
+
+## Earlier phase status (history)
+- Phase 1 (client protocol core) — complete.
+- Phase 2 (Accessibility Service injection, clipboard, foreground service) — complete.
+- Phase 3 (hardening) — complete for 0.1.x, with the open items above.
+
+
+## Implemented (session log, history)
+
+The sections below are the per-session record of what was built. Where they conflict with the current state section at the top, or with `docs/limitations.md`, the current state wins.
 
 ## Implemented (Phase 1)
 - Protocol layer (`app/src/main/java/com/crrpendlebury/barrierandroid/protocol/`): BarrierClient, BarrierPacket, PacketCodec, BarrierTransport, SocketBarrierTransport, BarrierModels, BarrierCommand, BarrierConstants.
@@ -84,11 +95,14 @@
 - Socket transport (now true Barrier TLS): plain `java.net.Socket` for plaintext, `SSLSocket` for TLS whose server is pinned by SHA-256 fingerprint of the leaf certificate (Barrier `ENCRYPTED_AUTHENTICATED` — no chain validation, app-level fingerprint check); hostname verification disabled; trust on first use (first observed fingerprint accepted and persisted to SharedPreferences `server_fingerprint`); no double-connect; `useTls` respected (UI always passes true); socket errors → `BarrierError.ConnectionFailed`.
 
 ## Build / test status
-- `./gradlew :app:testDebugUnitTest --offline` → **GREEN: 27/27 tests** (PacketCodecTest 16/16, BarrierClientTest 11/11).
+- `./gradlew :app:testDebugUnitTest :app:assembleRelease --offline -x lintVitalRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease` → **BUILD SUCCESSFUL**, 48 tests, 0 failures (PacketCodecTest 18, BarrierClientTest 12, BarrierServerTrustManagerTest 7, HostShortcutsTest 8, BarrierKeyMapTest 3).
+- Release signing: `CN=BarrierAndroid`, keystore `/home/chris/Android/keystore/barrier-release.jks` (alias `barrier`). The keystore is outside the repo.
+- Older entries below mention 27 or 35 tests; those counts are history.
 - `./gradlew :app:assembleDebug --offline` → **GREEN / SUCCESSFUL** (full APK built).
 - Re-verified at HEAD `9bb8800` (2026-11-20 02:48:28 +1100): `./gradlew :app:testDebugUnitTest --offline` → **BUILD SUCCESSFUL** (`testDebugUnitTest` UP-TO-DATE).
 
 ## Known issues / gotchas
+- The dated entries under this heading record the debugging history. Current known limitations are in `docs/limitations.md`.
 - Environment's android.jar (platforms/android-35) lacks SSLSocketFactory.createSSLSocket → TLS uses standard SSLSocket with a fingerprint-pinning TrustManager (Barrier's fingerprint-verified TLS, trust on first use).
 - Offline builds: use --offline; androidx.appcompat not cached.
 - Kotlin nested-class instantiation requires parens: `BarrierPacket.KeepAlivePacket()`, etc.
@@ -124,8 +138,15 @@
 - **Verbose comments policy**: plan + docs/comments.md. All source files commented.
 - **Git email**: chris@christopherpendlebury.com (verified on GitHub).
 
-## Immediate next steps
-1. On-device validation: retest the cursor overlay with the latest APK (HEAD `9bb8800`, 2026-11-20) - the overlay is in final known-good shape (service-context hosting, gravity `TOP or START`, `TYPE_ACCESSIBILITY_OVERLAY`, white arrow + black outline, `DEBUG_OVERLAY_FILL = false`, `VERBOSE_CURSOR_LOG = false`, `TAP_DURATION_MS = 100L`, drag via `DragCoalescer` continuing strokes), but `injectPointer` was reworked on 2026-11-20 for drag after the last visual retest, so the drag-driven show/move/hide path needs a fresh retest: expect overlay add then attach then size then draw then cursor visible; validate button hold/release (drag), disconnect/screensaver hide, and cursor size/position on the real screen. The connection, injection, clipboard, screensaver, options, reconnect and background-survival paths also still need on-device validation with a real Barrier server.
+## Immediate next steps (2026-11-25)
+1. Device validation still open: horizontal wheel scroll; Ctrl+L, Ctrl+PageDown, and Alt+Left in a browser with a focused field; screen wake on a second device or ROM; button hold and drag over a longer span.
+2. Forward button: needs real input injection (hidden `InputManager` path, system signature). Not planned until a route is confirmed.
+3. Wake: `SCREEN_BRIGHT_WAKE_LOCK | ACQUIRE_CAUSES_WAKEUP` is deprecated and its flag "will require TURN_SCREEN_ON" in future releases. If it stops working, the replacement is an activity with `setTurnScreenOn` launched from a full-screen-intent notification.
+4. Next release: update `metadata/com.crrpendlebury.barrierandroid.yml` (F-Droid recipe still at 0.1.1) and the Fastlane changelog when resubmitting. The F-Droid submission was closed earlier; see item 6.
+5. F-Droid resubmission (future): MR `fdroid/fdroiddata!58615` was closed by linsui (template not followed; maintenance policy). When ready: update MR description to follow the template (abstract with summary/usage + screenshots; checklist incl. reproducible builds; "New app: ..." title format), add phone screenshots, address the >3-month maintenance expectation, then resubmit via the CI route (fork `cpendlebury/fdroiddata`, branch `com.crrpendlebury.barrierandroid`, MR against `fdroid/fdroiddata`).
+6. Plaintext TLS toggle in the UI: the transport supports it; the UI always passes `useTls = true`.
+
+## Earlier next steps (history) (HEAD `9bb8800`, 2026-11-20) - the overlay is in final known-good shape (service-context hosting, gravity `TOP or START`, `TYPE_ACCESSIBILITY_OVERLAY`, white arrow + black outline, `DEBUG_OVERLAY_FILL = false`, `VERBOSE_CURSOR_LOG = false`, `TAP_DURATION_MS = 100L`, drag via `DragCoalescer` continuing strokes), but `injectPointer` was reworked on 2026-11-20 for drag after the last visual retest, so the drag-driven show/move/hide path needs a fresh retest: expect overlay add then attach then size then draw then cursor visible; validate button hold/release (drag), disconnect/screensaver hide, and cursor size/position on the real screen. The connection, injection, clipboard, screensaver, options, reconnect and background-survival paths also still need on-device validation with a real Barrier server.
 
    **2026-11-18 update — route 2**: after the `createWindowContext` crash + revert, selected **route 2** as the path to a working cursor (Red Moon-aligned overlay: full-screen translucent layout, `WRAP_CONTENT` + `gravity = TOP`, flags, `TYPE_ACCESSIBILITY_OVERLAY`, plain-context add). Instrumentation added and pushed (build green). Overlay implemented via plain service-context `WindowManager` add with no-arg `LayoutParams` + field assignment and `gravity = Gravity.TOP or Gravity.START`; real-device validation of the cursor was pending after the overlay fixes and the 2026-11-20 `injectPointer` drag rework.
 2. Remaining key injection: arbitrary keycodes still lack an accessibility path (compileSdk 35 has no `dispatchKeyEvent`); server keystrokes now flow through the Barrier IME (`BarrierIME` + `ImeSwitcher`) when enabled — validate the user-side enablement/selection flow on device, then evaluate hidden `InputManager` reflection for direct key injection.

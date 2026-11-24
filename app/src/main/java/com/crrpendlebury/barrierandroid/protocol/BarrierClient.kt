@@ -538,11 +538,11 @@ class BarrierClient(
     }
 
     private suspend fun handleFileTransfer(packet: BarrierPacket.FileTransferPacket) {
-        // File transfer handling is deferred to Phase 3 hardening.
+        // File transfer handling is deferred. The packet is decoded and ignored.
     }
 
     private suspend fun handleDragInfo(packet: BarrierPacket.DragInfoPacket) {
-        // Drag information handling is deferred to Phase 3 hardening.
+        // Drag information handling is deferred. The packet is decoded and ignored.
     }
 
     // ------------------------------------------------------------------

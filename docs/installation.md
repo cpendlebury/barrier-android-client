@@ -40,7 +40,7 @@ Debug APK:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Release packaging (`:app:assembleRelease`) is configured with the release signing config and produced the signed release build for 0.1.0; the official distribution APK is the GitHub release asset described above. Minify is off.
+Release packaging (`:app:assembleRelease`) uses the release signing config when the release keystore is present; otherwise it produces an unsigned release build, which is what F-Droid builds. The official distribution APK is the GitHub release asset described above. Minify is off.
 
 ## Install on a device
 
@@ -50,7 +50,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 The launcher label is **BarrierAndroid**. The application id is `com.crrpendlebury.barrierandroid`.
 
-Declared `minSdk` is 22 (Android 5.1). Do not use that as a support promise. Starting the connection service calls APIs that require Android 10 (API 29), and Android 14 may reject the foreground-service type. See [limitations](limitations.md).
+Declared `minSdk` is 22 (Android 5.1). The app has been tested on one personal phone only. Older versions have `SDK_INT` guards for the notification channel (API 26) and the three-argument `startForeground` (API 29), but they are not tested, so do not treat them as supported. The manifest declares the foreground-service subtype that Android 14 requires. See [limitations](limitations.md).
 
 ## Tests
 
