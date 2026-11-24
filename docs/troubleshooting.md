@@ -84,7 +84,7 @@ After a server drop, the client reconnects with exponential backoff (1s â†’ 2s â
 
 ## Stock Files app does not open folders
 
-In the stock Android Files app (`com.android.documentsui`), tapping a folder shows the press feedback, but the folder does not open. Other apps are not affected, and Fossify File Manager opens folders from the same tap.
+In the stock Android Files app (`com.android.documentsui`), tapping a folder shows the press feedback, but the folder does not open. Other apps are not affected, and Fossify File Manager opens folders from the same tap. Observed on a Google Pixel 8a running GrapheneOS on Android 17 (build 2026100201); other devices are not known to be affected.
 
 This is a known limitation. The input path delivers the click to Files, so the cause appears to be inside Files. See [limitations](limitations.md).
 

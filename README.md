@@ -34,7 +34,7 @@ Known gaps, and what is not verified on other devices, are listed in [Status and
 
 ## Requirements
 
-- Android 5.1 or newer declared (`minSdk` 22). Tested on a Google Pixel 8a running GrapheneOS; see [installation](docs/installation.md).
+- Android 5.1 or newer declared (`minSdk` 22). Tested on a Google Pixel 8a running GrapheneOS on Android 17; see [installation](docs/installation.md).
 - A Barrier server, v2.4.0 or newer (protocol 1.6), reachable on the network.
 - The accessibility service and the Barrier keyboard enabled by the user. On Android 13+, allow restricted settings for the app first.
 
@@ -79,7 +79,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 - **Some chords are unmapped.** Meta alone (app drawer), Meta+A (assistant), and Meta+/ (keyboard shortcuts).
 - **Screen wake is device-dependent.** It uses a deprecated wake-lock flag, and a secure lock screen still needs unlocking.
 - **TLS is always requested.** There is no plaintext toggle in the app.
-- **Stock Files** does not open folders from a tap. Use another file manager.
+- **Stock Files** does not open folders from a tap on the test device (Pixel 8a, GrapheneOS, Android 17). Use another file manager.
 - **Options**: `MDLT` (relative mouse moves) is not read, `SSVR` is stored but does not lock the phone, and file transfer and drag packets are ignored.
 
 ## License

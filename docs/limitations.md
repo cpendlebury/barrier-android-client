@@ -8,7 +8,7 @@ The app is a working Barrier client for Android. It connects to a Barrier server
 
 The phone does not show the computer's screen. Video is out of scope.
 
-The app is tested on one device so far: a Google Pixel 8a running GrapheneOS. Behaviour on other phones, other Android versions, and other ROMs is not verified. Screen wake in particular depends on the device.
+The app is tested on one device so far: a Google Pixel 8a running GrapheneOS on Android 17 (build 2026100201). Behaviour on other phones, other Android versions, and other ROMs is not verified. Screen wake in particular depends on the device.
 
 ## Confirmed on a real phone
 
@@ -30,7 +30,7 @@ Confirmed by the maintainer on a Google Pixel 8a running GrapheneOS, over a live
 - **There is no real system pointer.** Taps, drags, and scrolls are accessibility gestures (`dispatchGesture`). The framework cannot hold a real button down across calls, so a drag is approximated with a chain of short continuing strokes.
 - **Scroll distance is fixed.** Each wheel event is a 200 px swipe over 100 ms, whatever the size of the host's wheel delta. Horizontal wheel events (`xDelta`) use the same swipe and are not validated on device.
 - **Some apps ignore injected scroll gestures**, so they may not scroll at all.
-- **Stock Files does not open folders from a tap.** In the stock Android Files app (`com.android.documentsui`), tapping a folder shows press feedback, but the folder does not open. Fossify File Manager works from the same tap. Experiments with press duration, node-click on release, and a Files-only `ACTION_CLICK` did not fix it. See [troubleshooting](troubleshooting.md#stock-files-app-does-not-open-folders).
+- **Stock Files does not open folders from a tap.** Observed on the test device (Pixel 8a, GrapheneOS, Android 17) in the stock Android Files app (`com.android.documentsui`): tapping a folder shows press feedback, but the folder does not open. Fossify File Manager works from the same tap. Experiments with press duration, node-click on release, and a Files-only `ACTION_CLICK` did not fix it. Whether other devices show it is not known. See [troubleshooting](troubleshooting.md#stock-files-app-does-not-open-folders).
 
 ### Buttons
 

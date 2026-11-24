@@ -7,7 +7,7 @@
 
 ## Current state (2026-11-25, release 0.1.2)
 - Release **0.1.2** is published on GitHub (tag `0.1.2`, `versionCode` 4, signed APK SHA-256 `89ee1157…`). Source HEAD is the 0.1.2 release commit `168efe6` plus the documentation review that followed.
-- The connection works end to end on a Google Pixel 8a running GrapheneOS: Barrier 2.4.0 handshake over TLS with fingerprint pinning, the cursor overlay follows the host pointer, left click, right click and back go back, wheel scrolls both ways, host input wakes the screen, host shortcuts (Home, recents, shade, quick settings, lock, screenshot, Meta+N) work, keystrokes go through the Barrier keyboard into focused fields, and the clipboard works in both directions.
+- The connection works end to end on a Google Pixel 8a running GrapheneOS on Android 17: Barrier 2.4.0 handshake over TLS with fingerprint pinning, the cursor overlay follows the host pointer, left click, right click and back go back, wheel scrolls both ways, host input wakes the screen, host shortcuts (Home, recents, shade, quick settings, lock, screenshot, Meta+N) work, keystrokes go through the Barrier keyboard into focused fields, and the clipboard works in both directions.
 - Current behaviour, known gaps, and device-confirmed items are in `docs/limitations.md`. Architecture is in `docs/architecture.md`. Treat those as the source of truth; the dated sections below are history.
 - Still open: forward button (no public API); horizontal scroll and Ctrl/Alt app shortcuts not validated on device; screen wake depends on device and uses a deprecated flag; Meta alone, Meta+A, and Meta+/ unmapped.
 

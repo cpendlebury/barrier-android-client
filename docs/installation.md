@@ -50,11 +50,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 The launcher label is **BarrierAndroid**. The application id is `com.crrpendlebury.barrierandroid`.
 
-Declared `minSdk` is 22 (Android 5.1). The app has been tested on one device only: a Google Pixel 8a running GrapheneOS. Older versions have `SDK_INT` guards for the notification channel (API 26) and the three-argument `startForeground` (API 29), but they are not tested, so do not treat them as supported. The manifest declares the foreground-service subtype that Android 14 requires. See [limitations](limitations.md).
+Declared `minSdk` is 22 (Android 5.1). The app has been tested on one device only: a Google Pixel 8a running GrapheneOS on Android 17. Older versions have `SDK_INT` guards for the notification channel (API 26) and the three-argument `startForeground` (API 29), but they are not tested, so do not treat them as supported. The manifest declares the foreground-service subtype that Android 14 requires. See [limitations](limitations.md).
 
 ### Pixel 8a with GrapheneOS
 
-The tested device is a Google Pixel 8a running GrapheneOS. Notes for that setup:
+The tested device is a Google Pixel 8a running GrapheneOS on Android 17 (build 2026100201). Notes for that setup:
 
 - Install the APK the same way as on stock Android: open it from the browser's download, and allow installs from that browser when asked.
 - The accessibility toggle and the Barrier keyboard are set in the normal Settings screens. If the accessibility toggle is greyed out, use the restricted-settings steps in [troubleshooting](troubleshooting.md#app-was-denied-access-android-13).
