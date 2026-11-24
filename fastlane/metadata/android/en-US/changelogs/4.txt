@@ -1,0 +1,1 @@
+Mouse wheel scrolls both ways, right click and the back button go back, host Home, recent apps, notification shade, quick settings, lock screen, and screenshot shortcuts work, and host input wakes the screen.

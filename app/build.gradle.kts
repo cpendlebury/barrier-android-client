@@ -16,8 +16,8 @@ android {
         applicationId = "com.crrpendlebury.barrierandroid"
         minSdk = 22
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.1"
+        versionCode = 4
+        versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

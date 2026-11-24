@@ -40,9 +40,9 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 
 ## Quick start
 
-### Install the 0.1.1 release APK
+### Install the 0.1.2 release APK
 
-1. On your Android device, open the browser and download [`barrier-android-0.1.1.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.1/barrier-android-0.1.1.apk) from the [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.1).
+1. On your Android device, open the browser and download [`barrier-android-0.1.2.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.2/barrier-android-0.1.2.apk) from the [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.2).
 2. When the download completes, open the notification shade or Downloads and tap the APK, then confirm installation.
 3. If Android prompts, allow installing unknown apps from the browser; on Android 11+ you may need to grant that permission.
 4. Open **Settings → Accessibility → BarrierAndroid** and enable the service (grant restricted settings on Android 13+).
@@ -65,7 +65,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 
 | Document | Description |
 |----------|-------------|
-| [Installation](docs/installation.md) | Install the 0.1.1 release APK or build from source, prerequisites |
+| [Installation](docs/installation.md) | Install the 0.1.2 release APK or build from source, prerequisites |
 | [Usage](docs/usage.md) | Connecting, enabling accessibility, injecting input |
 | [Configuration](docs/configuration.md) | Server setup, options, clipboard, TLS |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |

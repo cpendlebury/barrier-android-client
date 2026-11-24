@@ -2,17 +2,17 @@
 
 This page covers installing the current release APK, building/installing the debug APK, and running unit tests. The app connects to a Barrier server and reaches `CONNECTED`, but input injection is limited to discrete gestures and clipboard-based text. Read [Status and limitations](limitations.md) first.
 
-The current public release is 0.1.1, published on GitHub: [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.1).
+The current public release is 0.1.2, published on GitHub: [GitHub release](https://github.com/cpendlebury/barrier-android-client/releases/tag/0.1.2).
 
-## Release APK — 0.1.1
+## Release APK — 0.1.2
 
-- Release version: `0.1.1` (`versionCode` 3)
-- APK: [`barrier-android-0.1.1.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.1/barrier-android-0.1.1.apk)
-- SHA-256: `0ad95d1c44336f7aba6ff6d4326334f0a34b8a0d58fe2e904ed5ccca07f66437`
+- Release version: `0.1.2` (`versionCode` 4)
+- APK: [`barrier-android-0.1.2.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.2/barrier-android-0.1.2.apk)
+- SHA-256: `89ee11579d7cf977ede8a1b4f45ab72af0a39f1c814bd5ae21af0c1f5eb97cb0`
 
 Install the release APK directly on the Android device:
 
-1. Open the browser on your Android device and download [`barrier-android-0.1.1.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.1/barrier-android-0.1.1.apk).
+1. Open the browser on your Android device and download [`barrier-android-0.1.2.apk`](https://github.com/cpendlebury/barrier-android-client/releases/download/0.1.2/barrier-android-0.1.2.apk).
 2. When the download completes, open the notification shade or Downloads and tap the APK, then confirm installation.
 3. If Android prompts, allow installing unknown apps from the browser; on Android 11+ you may need to grant that permission.
 
@@ -58,7 +58,7 @@ Declared `minSdk` is 22 (Android 5.1). Do not use that as a support promise. Sta
 ./gradlew :app:testDebugUnitTest
 ```
 
-That runs the JVM unit tests only. There are no instrumented tests that talk to a Barrier server or an accessibility service. Expected result with the current tree: 27 tests, 0 failures.
+That runs the JVM unit tests only. There are no instrumented tests that talk to a Barrier server or an accessibility service. Expected result with the current tree: 48 tests, 0 failures.
 
 ## Names you will see
 
