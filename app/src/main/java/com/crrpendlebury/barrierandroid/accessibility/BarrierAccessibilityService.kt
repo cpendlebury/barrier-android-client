@@ -25,6 +25,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.sign
 
 /**
  * Accessibility service that is supposed to apply Barrier input on the phone.
@@ -49,8 +50,10 @@ import java.io.FileOutputStream
  * add or remove a translucent overlay window that draws a standard arrow; the
  * overlay mirrors injected position but is a rendering surface only. [injectPointer]
  * remains the sole place that turns Barrier pointer traffic into framework
- * gestures. The cursor is hidden when the client disconnects or the screensaver
- * starts, and subsequent injected input re-shows it.
+ * gestures, translating signed host wheel deltas for
+ * [android.view.MotionEvent.ACTION_SCROLL] into a scroll gesture. The cursor is
+ * hidden when the client disconnects or the screensaver starts, and subsequent
+ * injected input re-shows it.
  */
 class BarrierAccessibilityService : AccessibilityService() {
 
@@ -154,16 +157,21 @@ class BarrierAccessibilityService : AccessibilityService() {
      *   tracked position and moves the cursor. Movement strokes were removed:
      *   they caused side effects (phantom keystrokes, accidental scrolls), and
      *   clicks already land on the tracked position.
-     * - [android.view.MotionEvent.ACTION_SCROLL]: a vertical swipe. x/y deltas
-     *   are not passed in (the caller only gives a point), so this swipes
-     *   down a fixed amount. A real scroll needs axis data, which
-     *   [GestureDescription] does not carry.
+     * - [android.view.MotionEvent.ACTION_SCROLL]: a scroll gesture. The host
+     *   wheel deltas arrive as [scrollXDelta] / [scrollYDelta] and select the
+     *   direction: a positive delta scrolls content down (the gesture stroke
+     *   ends above its start), a negative delta scrolls up (the stroke ends
+     *   below it). The distance is one [SCROLL_DISTANCE_PX] step per scroll
+     *   event; [GestureDescription] carries no axis or delta data, so the
+     *   signed delta is expressed as the direction of the scroll stroke. A
+     *   both-zero delta is a no-op and dispatches nothing.
      * - anything else: treated as a tap at (x, y).
      *
-     * [action] is now consulted. Earlier versions ignored it.
+     * [action] is now consulted. Earlier versions ignored it, and the scroll
+     * path ignored the wheel deltas entirely (it always swiped down).
      *
      * @return whatever [dispatchGesture] returns, or false when no gesture was
-     * dispatched (movement and release).
+     * dispatched (movement and release, and scroll with both deltas zero).
      * True means the framework accepted the gesture object, not that a
      * pointer event was delivered to an app.
      *
@@ -172,7 +180,13 @@ class BarrierAccessibilityService : AccessibilityService() {
      * not a gesture source. Button-down, movement, and scroll show the cursor;
      * button-up hides it.
      */
-    fun injectPointer(x: Float, y: Float, action: Int): Boolean {
+    fun injectPointer(
+        x: Float,
+        y: Float,
+        action: Int,
+        scrollXDelta: Float = 0f,
+        scrollYDelta: Float = 0f,
+    ): Boolean {
         // Mirror injected pointer motion onto the visible cursor overlay. The
         // overlay is a render surface only; dispatchGesture below remains the
         // sole gesture-producing path. Movement and button-up hide/show here.
@@ -186,7 +200,10 @@ class BarrierAccessibilityService : AccessibilityService() {
                 showCursor(x, y)
             }
             MotionEvent.ACTION_SCROLL -> {
-                logVerbose(this, "injectPointer ACTION_SCROLL x=$x y=$y")
+                logVerbose(
+                    this,
+                    "injectPointer ACTION_SCROLL x=$x y=$y xDelta=$scrollXDelta yDelta=$scrollYDelta",
+                )
                 showCursor(x, y)
             }
             MotionEvent.ACTION_UP -> {
@@ -204,8 +221,8 @@ class BarrierAccessibilityService : AccessibilityService() {
             MotionEvent.ACTION_MOVE -> continueDrag(x, y)
             MotionEvent.ACTION_UP -> endDrag(x, y)
             MotionEvent.ACTION_SCROLL -> {
-                val gesture = scrollGesture(x, y)
-                dispatchGesture(gesture, gestureResultCallback, handler)
+                val gesture = scrollGesture(x, y, scrollXDelta, scrollYDelta)
+                gesture?.let { dispatchGesture(it, gestureResultCallback, handler) } ?: false
             }
             else -> {
                 val gesture = tapGesture(x, y)
@@ -281,16 +298,35 @@ class BarrierAccessibilityService : AccessibilityService() {
             .build()
     }
 
-    private fun scrollGesture(x: Float, y: Float): GestureDescription {
-        // GestureDescription path bounds must not be negative; a scroll
-        // arriving near the top of the display (small or negative y) would
-        // otherwise throw IllegalArgumentException and kill the process.
+    /**
+     * Builds the scroll gesture for one host wheel event.
+     *
+     * Content travels opposite the injected stroke: a wheel delta that scrolls
+     * down (positive) moves content up, so the stroke ends above its start; a
+     * negative delta scrolls up and the stroke ends below it. [GestureDescription]
+     * carries no axis or delta data, so the signed delta is expressed as the
+     * direction of a straight scroll stroke, one [SCROLL_DISTANCE_PX] step per
+     * scroll event. A both-zero delta means there is nothing to scroll and no
+     * gesture is produced.
+     *
+     * The path bounds must not be negative; a scroll arriving near the top (or
+     * left) of the display (small or negative origin) would otherwise throw an
+     * `IllegalArgumentException` and kill the process, so both ends are clamped
+     * to the non-negative quadrant.
+     *
+     * @return the scroll gesture, or null when both deltas are zero (no scroll).
+     */
+    private fun scrollGesture(x: Float, y: Float, scrollXDelta: Float, scrollYDelta: Float): GestureDescription? {
+        if (scrollXDelta == 0f && scrollYDelta == 0f) {
+            return null
+        }
         val startX = if (x < 0f) 0f else x
         val startY = if (y < 0f) 0f else y
-        val endY = if (y - SCROLL_DISTANCE_PX < 0f) 0f else y - SCROLL_DISTANCE_PX
+        val endX = (startX - SCROLL_DISTANCE_PX * sign(scrollXDelta)).coerceAtLeast(0f)
+        val endY = (startY - SCROLL_DISTANCE_PX * sign(scrollYDelta)).coerceAtLeast(0f)
         val path = Path().apply {
             moveTo(startX, startY)
-            lineTo(startX, endY)
+            lineTo(endX, endY)
         }
         return GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, SCROLL_STROKE_DURATION_MS))
@@ -336,6 +372,35 @@ class BarrierAccessibilityService : AccessibilityService() {
      * @return true when the framework accepted the action.
      */
     fun injectGlobalAction(globalAction: Int): Boolean = performGlobalAction(globalAction)
+
+    /**
+     * Injects the host Back mouse button as an Android Back navigation action.
+     *
+     * The accessibility dispatch surface has no discrete back-button event, so
+     * the Back navigation is performed through the BACK global action, the same
+     * action the host Back key already uses via [injectKey]. A Back button press
+     * therefore navigates back; the matching release is a no-op (no second action
+     * fires).
+     *
+     * @return true when [performGlobalAction] accepted BACK.
+     */
+    fun injectBack(): Boolean = injectGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+
+    /**
+     * Injects the host Forward mouse button as a forward navigation action.
+     *
+     * There is no public forward navigation action on this compile SDK (the
+     * public global-action set covers back / home / recents / notifications /
+     * quick settings / lock / snapshot and a few others, but not forward), so
+     * this returns false and logs; real forward injection would need the hidden
+     * `InputManager` / `IInputManager` binder path, which is not implemented.
+     *
+     * @return always false on this compile SDK; no forward action exists.
+     */
+    fun injectForward(): Boolean {
+        BarrierAccessibilityService.log(this, "injectForward: no public forward action on this SDK; not injected")
+        return false
+    }
 
     /**
      * Shows the on-screen pointer cursor at (x, y) by adding a translucent
@@ -632,6 +697,22 @@ class BarrierAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        /**
+         * Host mouse back button id carried by the `DMDN` / `DMUP` `button`
+         * field. Maps to the BACK navigation global action via [injectBack]. The
+         * value is the host driver's back button number in the server's button
+         * space; pending on-device retest to confirm it against a real host mouse.
+         */
+        const val BACK_MOUSE_BUTTON = 8
+
+        /**
+         * Host mouse forward button id carried by the `DMDN` / `DMUP` `button`
+         * field. Maps to [injectForward]. The value is the host driver's forward
+         * button number in the server's button space; pending on-device retest to
+         * confirm it against a real host mouse.
+         */
+        const val FORWARD_MOUSE_BUTTON = 9
+
         private const val DISPLAY_ID = 0
         private const val MAX_EDITABLE_NODE_SEARCH_DEPTH = 8
         /**

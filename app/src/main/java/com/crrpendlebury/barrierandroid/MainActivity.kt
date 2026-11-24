@@ -124,15 +124,38 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is BarrierInputEvent.MouseWheel -> {
-                    service.injectPointer(0f, 0f, MotionEvent.ACTION_SCROLL)
+                    // Wheel events carry signed scroll deltas and land at the
+                    // tracked pointer position; injectPointer maps the deltas onto
+                    // a scroll gesture (positive delta scrolls down, negative up).
+                    service.injectPointer(
+                        lastPointerX,
+                        lastPointerY,
+                        MotionEvent.ACTION_SCROLL,
+                        event.xDelta.toFloat(),
+                        event.yDelta.toFloat(),
+                    )
                 }
 
                 is BarrierInputEvent.MouseButtonDown -> {
-                    service.injectPointer(lastPointerX, lastPointerY, MotionEvent.ACTION_DOWN)
+                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON) {
+                        service.injectBack()
+                    } else if (event.button == BarrierAccessibilityService.FORWARD_MOUSE_BUTTON) {
+                        service.injectForward()
+                    } else {
+                        service.injectPointer(lastPointerX, lastPointerY, MotionEvent.ACTION_DOWN)
+                    }
                 }
 
                 is BarrierInputEvent.MouseButtonUp -> {
-                    service.injectPointer(lastPointerX, lastPointerY, MotionEvent.ACTION_UP)
+                    if (event.button == BarrierAccessibilityService.BACK_MOUSE_BUTTON) {
+                        // The back press already fired the BACK action on down; the
+                        // release is a no-op and must not fire a click.
+                    } else if (event.button == BarrierAccessibilityService.FORWARD_MOUSE_BUTTON) {
+                        // Forward has no public injection path; the down already
+                        // declined it, so the release is a no-op too.
+                    } else {
+                        service.injectPointer(lastPointerX, lastPointerY, MotionEvent.ACTION_UP)
+                    }
                 }
 
                 is BarrierInputEvent.ScreenEntered, is BarrierInputEvent.ScreenLeft -> {

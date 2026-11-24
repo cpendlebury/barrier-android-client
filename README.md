@@ -22,7 +22,7 @@ The protocol layer is unit-tested (27 tests, all passing). The Android app now c
 
 - **Protocol client** — full Barrier v1.6 handshake, keepalive, input events, clipboard, screensaver, options, reconnect
 - **TCP/TLS transport** — plain socket or TLS (server authenticated by SHA-256 fingerprint, Barrier's `ENCRYPTED_AUTHENTICATED`); the observed server fingerprint is displayed in the app
-- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, scroll, and press/move/release drags via continuing strokes; movement sends no gesture); visible cursor overlay mirrors injected position.
+- **Pointer injection** — discrete gestures via `dispatchGesture` (tap, scroll, and press/move/release drags via continuing strokes; movement sends no gesture); visible cursor overlay mirrors injected position. Host wheel events become signed scroll gestures (positive `yDelta` scrolls down, negative scrolls up; flat 200 px per event). Host Back/Forward mouse buttons route to the BACK global action (Back) and are declined (Forward); unmapped buttons keep the tap behaviour.
 - **Text injection** — clipboard push stores into the device clipboard; delivery into a focused field happens via explicit paste (`ACTION_SET_TEXT` retained as the field-level primitive)
 - **Navigation keys** — Back, Home, Recents via framework global actions
 - **Clipboard sync** — CCLP/DCLP round-trip via `ClipboardManager`
@@ -82,6 +82,7 @@ See [Usage](docs/usage.md) for the full walkthrough.
 - **Options partially applied**: CLPS and HART are wired; SSVR is recorded; MDLT is declared but not read.
 - **File transfer / drag**: `DFTR`/`DDRG` packets are decoded and ignored.
 - **On-device validation**: the connection handshake, visible cursor overlay, and (as of the latest device session) mouse movement and keyboard-over-IME have been tested on a real device against a live Barrier server; the TLS transport rewrite predates that validation. Since the 2026-11-20 drag rework, the drag-driven overlay path needs a fresh retest; full input-injection behaviour (button hold/release, disconnect/screensaver hide, cursor size and position) still needs validation.
+- **Scroll fidelity**: host wheel scrolling is injected as a synthetic accessibility scroll gesture — direction from the signed wheel delta, a flat 200 px swipe per event — because `GestureDescription` cannot carry axis or delta data; apps that ignore injected scroll gestures may not scroll. Real-input injection would lift this. Scroll behaviour itself is implemented (see [Usage](docs/usage.md)) and needs on-device validation.
 
 ## License
 
