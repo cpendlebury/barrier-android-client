@@ -378,7 +378,10 @@ sealed class BarrierPacket {
         }
     }
 
-    /** Server -> client relative mouse move (DMRM). */
+    /**
+     * Server -> client relative mouse move (DMRM). Both deltas are signed 16
+     * bit (Barrier `%2i`) and are decoded with [readSInt16].
+     */
     data class MouseRelativeMovePacket(
         val dx: Int,
         val dy: Int,
@@ -397,7 +400,11 @@ sealed class BarrierPacket {
         }
     }
 
-    /** Server -> client mouse scroll (DMWM). */
+    /**
+     * Server -> client mouse scroll (DMWM). Both deltas are signed 16 bit
+     * (Barrier `%2i`); +120 is wheel forward, -120 is wheel back, per
+     * Barrier's `XWindowsScreen`. Decoded with [readSInt16].
+     */
     data class MouseWheelPacket(
         val xDelta: Int,
         val yDelta: Int,
@@ -573,8 +580,8 @@ sealed class BarrierPacket {
                 BarrierCommand.DKRP.value -> KeyRepeatPacket(readInt16(body, 0), readInt16(body, 2), readInt16(body, 4), readInt16(body, 6))
                 BarrierCommand.DKUP.value -> KeyUpPacket(readInt16(body, 0), readInt16(body, 2), readInt16(body, 4))
                 BarrierCommand.DMMV.value -> MouseMovePacket(readInt16(body, 0), readInt16(body, 2))
-                BarrierCommand.DMRM.value -> MouseRelativeMovePacket(readInt16(body, 0), readInt16(body, 2))
-                BarrierCommand.DMWM.value -> MouseWheelPacket(readInt16(body, 0), readInt16(body, 2))
+                BarrierCommand.DMRM.value -> MouseRelativeMovePacket(readSInt16(body, 0), readSInt16(body, 2))
+                BarrierCommand.DMWM.value -> MouseWheelPacket(readSInt16(body, 0), readSInt16(body, 2))
                 BarrierCommand.DMDN.value -> MouseButtonDownPacket(readInt8(body, 0))
                 BarrierCommand.DMUP.value -> MouseButtonUpPacket(readInt8(body, 0))
                 BarrierCommand.DINF.value -> ScreenInfoPacket(
@@ -668,6 +675,13 @@ internal fun readInt8(bytes: ByteArray, offset: Int): Int = bytes[offset].toInt(
 /** Reads a big endian unsigned 16 bit integer. */
 internal fun readInt16(bytes: ByteArray, offset: Int): Int =
     ((bytes[offset].toInt() and 0xff) shl 8) or (bytes[offset + 1].toInt() and 0xff)
+
+/**
+ * Reads a big endian signed 16 bit integer. Barrier writes `DMWM` and `DMRM`
+ * deltas as `%2i` (two's complement), so -120 arrives as 0xFF88. Read unsigned,
+ * that becomes 65416, and every wheel-back event looked like a forward event.
+ */
+internal fun readSInt16(bytes: ByteArray, offset: Int): Int = readInt16(bytes, offset).toShort().toInt()
 
 /** Reads a big endian unsigned 32 bit integer. */
 internal fun readInt32(bytes: ByteArray, offset: Int): Int =

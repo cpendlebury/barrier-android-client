@@ -166,6 +166,23 @@ class PacketCodecTest {
     }
 
     @Test
+    fun mouseWheelBackDecodesAsNegativeDelta() {
+        // Wheel back: Barrier sends yDelta = -120 as two's complement 0xFF88.
+        val packet = BarrierPacket.MouseWheelPacket(xDelta = 0, yDelta = -120)
+        assertArrayEquals(
+            intArrayOf(68, 77, 87, 77, 0, 0, 255, 136), // "DMWM" + BE16(0) + BE16(-120)
+            packet.encode().toIntArray(),
+        )
+        assertEquals(packet, decodePacket(packet))
+    }
+
+    @Test
+    fun mouseRelativeMoveDecodesNegativeDeltas() {
+        val packet = BarrierPacket.MouseRelativeMovePacket(dx = -5, dy = -40)
+        assertEquals(packet, decodePacket(packet))
+    }
+
+    @Test
     fun incompatibleVersionPacketEncodesVersions() {
         val packet = BarrierPacket.IncompatibleVersionPacket(majorVersion = 2, minorVersion = 0)
         assertEquals(BarrierCommand.EICV, packet.command)

@@ -47,8 +47,8 @@ Unknown 4-byte commands return null, and the socket reader then stops. These com
 | `DKRP` | `KeyRepeatPacket` | u16 key id, u16 modifier mask, u16 repeat, u16 button |
 | `DKUP` | `KeyUpPacket` | u16 key id, u16 modifier mask, u16 button |
 | `DMMV` | `MouseMovePacket` | u16 x, u16 y |
-| `DMRM` | `MouseRelativeMovePacket` | u16 dx, u16 dy |
-| `DMWM` | `MouseWheelPacket` | u16 x delta, u16 y delta |
+| `DMRM` | `MouseRelativeMovePacket` | s16 dx, s16 dy (signed, two's complement) |
+| `DMWM` | `MouseWheelPacket` | s16 x delta, s16 y delta (signed; +120 wheel forward, -120 wheel back) |
 | `DMDN` | `MouseButtonDownPacket` | u8 button |
 | `DMUP` | `MouseButtonUpPacket` | u8 button |
 | `DINF` | `ScreenInfoPacket` | seven u16 fields: x origin, y origin, width, height, warp zone, mouse x, mouse y |
