@@ -8,11 +8,11 @@ The app is a working Barrier client for Android. It connects to a Barrier server
 
 The phone does not show the computer's screen. Video is out of scope.
 
-The app is tested on one personal phone so far. Behaviour on other devices, Android versions, and ROMs is not verified. In particular the screen-wake behaviour depends on the device.
+The app is tested on one device so far: a Google Pixel 8a running GrapheneOS. Behaviour on other phones, other Android versions, and other ROMs is not verified. Screen wake in particular depends on the device.
 
 ## Confirmed on a real phone
 
-Confirmed by the maintainer over a live Barrier server, in the 0.1.2 testing session unless noted:
+Confirmed by the maintainer on a Google Pixel 8a running GrapheneOS, over a live Barrier server, in the 0.1.2 testing session unless noted:
 
 - Connection and handshake to a server speaking protocol 1.6 (confirmed in earlier sessions; the TLS path was rewritten after that and exercised on the same connection). Reconnect with backoff is implemented but not separately confirmed on device.
 - Mouse movement shows a visible cursor overlay that follows the host pointer.

@@ -9,7 +9,7 @@ An Android **client** for the [Barrier](https://github.com/debauchee/barrier) ke
 
 ## Current status
 
-Version 0.1.2 works with a real Barrier server on a personal phone. Confirmed on the phone:
+Version 0.1.2 works with a real Barrier server on a Google Pixel 8a running GrapheneOS. Confirmed on the phone:
 
 - Connection and handshake with Barrier 2.4.0 (protocol 1.6), over TLS with the server's certificate fingerprint pinned.
 - A visible cursor that follows the host pointer, and left click.
@@ -34,7 +34,7 @@ Known gaps, and what is not verified on other devices, are listed in [Status and
 
 ## Requirements
 
-- Android 5.1 or newer declared (`minSdk` 22). Tested on one personal phone; see [installation](docs/installation.md).
+- Android 5.1 or newer declared (`minSdk` 22). Tested on a Google Pixel 8a running GrapheneOS; see [installation](docs/installation.md).
 - A Barrier server, v2.4.0 or newer (protocol 1.6), reachable on the network.
 - The accessibility service and the Barrier keyboard enabled by the user. On Android 13+, allow restricted settings for the app first.
 
